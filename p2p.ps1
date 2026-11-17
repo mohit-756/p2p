@@ -478,8 +478,8 @@ function New-CompactInput ($LabelText, $LblX, $TxtX, $Width) {
 }
 
 $txtCustomer = New-CompactInput "Customer:" 12 76 110
-$txtINC      = New-CompactInput "INC:" 200 233 110
-$txtOld      = New-CompactInput "Reference:" 358 425 175
+$txtINC      = New-CompactInput "INC (Opt):" 196 260 100
+$txtOld      = New-CompactInput "Reference:" 370 435 170
 $txtNew      = New-CompactInput "Public:" 618 668 175
 
 $grpOutput = New-Object System.Windows.Forms.GroupBox -Property @{
@@ -511,17 +511,18 @@ function New-ActionBtn ($Text, $X, $Width, $Color) {
         ForeColor = [System.Drawing.Color]::White
         FlatStyle = "Flat"
         Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        Cursor    = [System.Windows.Forms.Cursors]::Hand
     }
     $btn.FlatAppearance.BorderSize = 0
     $form.Controls.Add($btn)
     return $btn
 }
 
-$btnRun        = New-ActionBtn "Run Validation" 16 145 ([System.Drawing.Color]::ForestGreen)
-$btnExportHtml = New-ActionBtn "Export HTML" 170 135 ([System.Drawing.Color]::RoyalBlue)
-$btnExportTxt  = New-ActionBtn "Export TXT" 314 125 ([System.Drawing.Color]::SteelBlue)
-$btnCopyInc    = New-ActionBtn "Copy INC Summary" 448 145 ([System.Drawing.Color]::DarkSlateBlue)
-$btnClear      = New-ActionBtn "Clear" 602 100 ([System.Drawing.Color]::IndianRed)
+$btnRun        = New-ActionBtn "Run Validation" 16 145 ([System.Drawing.Color]::FromArgb(22, 163, 74))
+$btnExportHtml = New-ActionBtn "Export HTML" 170 135 ([System.Drawing.Color]::FromArgb(37, 99, 235))
+$btnExportTxt  = New-ActionBtn "Export TXT" 314 125 ([System.Drawing.Color]::FromArgb(30, 64, 175))
+$btnCopyInc    = New-ActionBtn "Copy INC Summary" 448 145 ([System.Drawing.Color]::FromArgb(79, 70, 229))
+$btnClear      = New-ActionBtn "Clear" 602 100 ([System.Drawing.Color]::FromArgb(71, 85, 105))
 
 $statusBar = New-Object System.Windows.Forms.StatusStrip -Property @{
     BackColor  = [System.Drawing.Color]::FromArgb(38, 38, 42)
@@ -535,9 +536,19 @@ $statusPill = New-Object System.Windows.Forms.ToolStripStatusLabel -Property @{
 $statusText = New-Object System.Windows.Forms.ToolStripStatusLabel -Property @{
     Text      = "Enter server names and click Run Validation"
     ForeColor = [System.Drawing.Color]::Gainsboro
+    Spring    = $true
+    TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+}
+$progressBar = New-Object System.Windows.Forms.ToolStripProgressBar -Property @{
+    Size                  = New-Object System.Drawing.Size(130, 16)
+    Style                 = [System.Windows.Forms.ProgressBarStyle]::Continuous
+    Value                 = 0
+    Visible               = $false
+    MarqueeAnimationSpeed = 30
 }
 [void]$statusBar.Items.Add($statusPill)
 [void]$statusBar.Items.Add($statusText)
+[void]$statusBar.Items.Add($progressBar)
 
 $form.Controls.AddRange(@($lblHeader, $grpInput, $grpOutput, $statusBar))
 
@@ -551,6 +562,8 @@ $btnClear.Add_Click({
     $txtINC.Clear()
     $txtOld.Clear()
     $txtNew.Clear()
+    $progressBar.Value = 0
+    $progressBar.Visible = $false
     $statusPill.Text = "[ READY ]"
     $statusPill.ForeColor = [System.Drawing.Color]::LightGray
     $statusText.Text = "Enter server names and click Run Validation"
@@ -618,7 +631,11 @@ $btnRun.Add_Click({
     $statusPill.Text = "[ VALIDATING ]"
     $statusPill.ForeColor = [System.Drawing.Color]::DeepSkyBlue
     $statusText.Text = "Executing unified data collection across Reference and Public..."
+    $progressBar.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+    $progressBar.MarqueeAnimationSpeed = 30
+    $progressBar.Visible = $true
     $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    $form.Refresh()
 
     $ValidationStart = Get-Date
     $Report = New-Object 'System.Collections.Generic.List[string]'
@@ -867,9 +884,6 @@ $btnRun.Add_Click({
             foreach ($u in $AmqUrls) {
                 $Report.Add("  $u")
             }
-            $Report.Add(
-                "AMQ Validation   : Manual Browser Verification"
-            )
         }
 
         # 5. DYNAMIC WRAPPER CONFIGURATION TABLES
@@ -955,20 +969,17 @@ $btnRun.Add_Click({
             Select-Object AppFolder -Unique
         ).Count
 
-        $Report.Add(
-            ("Applications With Log Warnings : {0}" -f $appWarningCount)
-        )
-
         # 10. MIGRATION SUMMARY
         Add-ReportSection -Report $Report -Title "10. MIGRATION SUMMARY"
-        $Report.Add(("Reference Running MRTs : {0}" -f $PrivData.Applications.Count))
-        $Report.Add(("Public Running MRTs    : {0}" -f $PubData.Applications.Count))
-        $Report.Add(("Matched MRTs           : {0}" -f $matchedPairs.Count))
-        $Report.Add(("Wrapper Matches        : {0}/{1}" -f $wrapPassCount, $matchedPairs.Count))
+        $Report.Add(("Reference Running MRTs         : {0}" -f $PrivData.Applications.Count))
+        $Report.Add(("Public Running MRTs            : {0}" -f $PubData.Applications.Count))
+        $Report.Add(("Matched MRTs                   : {0}" -f $matchedPairs.Count))
+        $Report.Add(("Applications With Log Warnings : {0}" -f $appWarningCount))
+        $Report.Add(("Wrapper Matches                : {0}/{1}" -f $wrapPassCount, $matchedPairs.Count))
         $Report.Add("Wrapper Custom Properties Checked : 4 (Oracle JDBC, Gatekeeper, Base URI, JavaTmpDir)")
-        $Report.Add(("Service Matches        : {0}/{1}" -f $PubData.Applications.Count, $PubData.Applications.Count))
-        $Report.Add(("Critical Errors Found  : {0}" -f $totalCritical))
-        $Report.Add(("Reference Differences  : {0}" -f ($OnlyOnReference.Count + $OnlyOnPublic.Count)))
+        $Report.Add(("Service Matches                : {0}/{1}" -f $PubData.Applications.Count, $PubData.Applications.Count))
+        $Report.Add(("Critical Errors Found          : {0}" -f $totalCritical))
+        $Report.Add(("Reference Differences          : {0}" -f ($OnlyOnReference.Count + $OnlyOnPublic.Count)))
 
         # 11. CUTOVER DECISION MATRIX
         Add-ReportSection -Report $Report -Title "11. CUTOVER DECISION MATRIX"
@@ -1009,6 +1020,9 @@ $btnRun.Add_Click({
         $Report.Add("====================================================================================")
 
         $output.Text = $Report -join [Environment]::NewLine
+        $progressBar.Style = [System.Windows.Forms.ProgressBarStyle]::Continuous
+        $progressBar.Value = 100
+        $progressBar.Visible = $true
         $statusPill.Text = "[ COMPLETED ]"
         $statusPill.ForeColor = if ($FailCount -eq 0) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::IndianRed }
         $statusText.Text = "Validation finished in $Duration seconds"
@@ -1056,6 +1070,8 @@ $($_.InvocationInfo.ScriptLineNumber)
 COMMAND:
 $($_.InvocationInfo.Line)
 "@
+        $progressBar.Value = 0
+        $progressBar.Visible = $false
         $statusPill.Text = "[ ERROR ]"
         $statusPill.ForeColor = [System.Drawing.Color]::Red
         $statusText.Text = "Validation execution failed"
@@ -1108,10 +1124,26 @@ $btnExportHtml.Add_Click({
             $actionItems += "<span style='color:#34d399;'>&check; No Reference Differences Detected</span>"
         }
 
-        # ActiveMQ Manual Verification in Action Box (HTML Links created ONLY here)
+        # ActiveMQ Environment Badges in Action Box
         if ($data.PubData.AmqFolders.Count -gt 0) {
-            $amqLinks = ($data.AmqUrls | ForEach-Object { "<a href='$_' target='_blank' style='color:#60a5fa;text-decoration:underline;'>$_</a>" }) -join " &bull; "
-            $actionItems += "ActiveMQ Console URLs (Manual Browser Verification): $amqLinks"
+            $listeningSet = @($data.PubData.AmqListeningPorts)
+            $pillList = @()
+            foreach ($u in $data.AmqUrls) {
+                $port = if ($u -match ':(\d+)/') { [int]$matches[1] } else { 0 }
+                $envLabel = switch ($port) {
+                    11080 { "PROD" }
+                    31080 { "QA" }
+                    51080 { "DEV" }
+                    default { "PORT $port" }
+                }
+                $isListening = ($listeningSet -contains $port)
+                if ($isListening) {
+                    $pillList += "<a href='$u' target='_blank' class='amq-pill active-listener'><span class='env-tag'>$envLabel ($port)</span> <span class='live-badge'>&#9679; LISTENING</span> <span class='pill-url'>$u</span></a>"
+                } else {
+                    $pillList += "<a href='$u' target='_blank' class='amq-pill'><span class='env-tag'>$envLabel ($port)</span> <span class='pill-url'>$u</span></a>"
+                }
+            }
+            $actionItems += "<div><strong>ActiveMQ Console URLs (Manual Browser Verification):</strong></div><div class='amq-pill-container'>" + ($pillList -join "") + "</div>"
         }
 
         $actionHtml = "<ul class='action-list'>"
@@ -1158,7 +1190,7 @@ $btnExportHtml.Add_Click({
             </div>
 "@
 
-        # ACTIVE MQ Installed Tile with Ports
+        # ACTIVE MQ Installed Tile with Ports (Cleaner: showing status & port)
         $amqInstalled = ($data.PubData.AmqFolders.Count -gt 0)
         $amqStatusText  = if ($amqInstalled) { "INSTALLED" } else { "NOT INSTALLED" }
         $amqStatusColor = if ($amqInstalled) { "#34d399" } else { "#9ca3af" }
@@ -1174,8 +1206,8 @@ $btnExportHtml.Add_Click({
                 <div class="metric-value" style="color:$amqStatusColor;">
                     $amqStatusText
                 </div>
-                <div style="font-size:11px;color:#d1d5db;margin-top:3px;">
-                    Ports: $amqPorts
+                <div style="font-size:12px;color:#93c5fd;font-weight:700;margin-top:4px;font-family:Consolas,monospace;">
+                    $amqPorts
                 </div>
             </div>
 "@
@@ -1232,7 +1264,8 @@ $btnExportHtml.Add_Click({
         .logo-title { font-size: 19px; font-weight: 800; color: #e5e7eb; letter-spacing: 0.5px; }
         .timestamp { font-size: 12px; color: #9ca3af; }
         
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+        @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
         .metric-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 14px 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
         .metric-label { font-size: 11px; text-transform: uppercase; color: #9ca3af; font-weight: 700; margin-bottom: 5px; letter-spacing: 0.5px; }
         .metric-value { font-size: 20px; font-weight: 700; color: #ffffff; }
@@ -1245,18 +1278,32 @@ $btnExportHtml.Add_Click({
         .badge-fail { background: #7f1d1d; border: 1px solid #dc2626; color: #fecaca; }
         .decision-title { font-size: 11.5px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; opacity: 0.9; }
         .decision-text { font-size: 26px; font-weight: 800; letter-spacing: 0.5px; }
+        .decision-subtitle { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 6px; opacity: 0.95; }
 
         .scope-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
         .scope-title { font-size: 12px; text-transform: uppercase; font-weight: 800; color: #e5e7eb; letter-spacing: 0.5px; margin-bottom: 10px; }
-        .scope-list { margin: 0; padding-left: 20px; line-height: 1.8; color: #d1d5db; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+        .scope-list { margin: 0; padding: 0; list-style: none; color: #d1d5db; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+        .scope-list li { display: flex; align-items: center; gap: 8px; }
+        .scope-check { color: #34d399; font-weight: 800; font-size: 14px; }
 
         .action-box { background: #1e1b4b; border-left: 4px solid #6366f1; border-radius: 8px; padding: 16px 22px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .action-title { font-size: 13px; font-weight: 800; color: #a5b4fc; text-transform: uppercase; margin-bottom: 6px; }
+        .action-title { font-size: 13px; font-weight: 800; color: #a5b4fc; text-transform: uppercase; margin-bottom: 8px; }
         .action-list { margin: 0; padding-left: 20px; color: #e0e7ff; line-height: 1.6; font-size: 13px; }
+
+        .amq-pill-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; margin-bottom: 4px; }
+        .amq-pill { display: inline-flex; align-items: center; gap: 8px; background: #111827; border: 1px solid #374151; padding: 7px 14px; border-radius: 6px; color: #93c5fd; text-decoration: none; font-size: 12px; font-family: Consolas, monospace; transition: all 0.15s ease-in-out; }
+        .amq-pill:hover { background: #1f2937; border-color: #60a5fa; color: #ffffff; }
+        .amq-pill.active-listener { background: #064e3b; border-color: #10b981; color: #ecfdf5; box-shadow: 0 0 10px rgba(16, 185, 129, 0.25); }
+        .amq-pill.active-listener:hover { background: #047857; color: #ffffff; }
+        .amq-pill .env-tag { font-weight: 800; font-family: 'Segoe UI', sans-serif; letter-spacing: 0.5px; }
+        .amq-pill .live-badge { background: #10b981; color: #022c22; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.5px; font-family: 'Segoe UI', sans-serif; }
+        .amq-pill .pill-url { color: #d1d5db; font-size: 11px; }
+        .amq-pill.active-listener .pill-url { color: #a7f3d0; }
 
         .matrix-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
         .matrix-title { font-size: 13.5px; font-weight: 800; color: #e5e7eb; text-transform: uppercase; margin-bottom: 14px; letter-spacing: 0.5px; }
-        .matrix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+        .matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        @media (max-width: 768px) { .matrix-grid { grid-template-columns: repeat(2, 1fr); } }
         .matrix-item { background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 16px; min-height: 55px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
 
         details { background: #1f2937; border: 1px solid #374151; border-radius: 8px; margin-bottom: 14px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
@@ -1308,11 +1355,11 @@ $btnExportHtml.Add_Click({
                     <div class="metric-label">CUSTOMER / INC</div>
                     <div class="metric-value">$custIncHtml</div>
                 </div>
-                $serverAccessTileHtml
                 <div class="metric-card">
                     <div class="metric-label">SERVERS (REF &rarr; PUB)</div>
                     <div class="metric-value" style="font-size:13px;word-break:break-all;">$($data.ReferenceServer)<br>&rarr; $($data.PublicServer)</div>
                 </div>
+                $serverAccessTileHtml
                 <div class="metric-card">
                     <div class="metric-label">MRT MATCH</div>
                     <div class="metric-value">$($data.MatchedPairs.Count) / $($data.PrivData.Applications.Count)</div>
@@ -1320,12 +1367,12 @@ $btnExportHtml.Add_Click({
                 $wrapperTileHtml
                 $amqTileHtml
                 <div class="metric-card">
-                    <div class="metric-label">RISK LEVEL</div>
-                    <div class="metric-value val-risk">$($data.RiskLevel)</div>
-                </div>
-                <div class="metric-card">
                     <div class="metric-label">DIFFERENCES</div>
                     <div class="metric-value val-diff">$totalDiffs</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">RISK LEVEL</div>
+                    <div class="metric-value val-risk">$($data.RiskLevel)</div>
                 </div>
             </div>
 
@@ -1333,8 +1380,11 @@ $btnExportHtml.Add_Click({
                 <div>
                     <div class="decision-title">Recommended Cutover Decision</div>
                     <div class="decision-text">$($data.Recommendation)</div>
+                    <div class="decision-subtitle">
+                        READ ONLY VALIDATION &bull; NO FILES MODIFIED &bull; NO SERVICES RESTARTED
+                    </div>
                 </div>
-                <div style="font-weight:700;font-size:13px;">$($data.FailCount) Failures Detected</div>
+                <div style="font-weight:700;font-size:13px;text-align:right;">$($data.FailCount) Failures Detected</div>
             </div>
         </div>
 
@@ -1342,13 +1392,13 @@ $btnExportHtml.Add_Click({
         <div class="scope-card">
             <div class="scope-title">Validation Scope</div>
             <ul class="scope-list">
-                <li>&#10003; MRT Mapping</li>
-                <li>&#10003; Services &amp; Accounts</li>
-                <li>&#10003; Wrapper Configuration (4 Custom Props)</li>
-                <li>&#10003; Temp Folders</li>
-                <li>&#10003; ActiveMQ Discovery</li>
-                <li>&#10003; Environment &amp; Java</li>
-                <li>&#10003; Log Escalation Signatures</li>
+                <li><span class="scope-check">&#10003;</span> MRT Mapping</li>
+                <li><span class="scope-check">&#10003;</span> Services &amp; Accounts</li>
+                <li><span class="scope-check">&#10003;</span> Wrapper Configuration</li>
+                <li><span class="scope-check">&#10003;</span> Temp Folders</li>
+                <li><span class="scope-check">&#10003;</span> ActiveMQ Discovery</li>
+                <li><span class="scope-check">&#10003;</span> Environment &amp; Java</li>
+                <li><span class="scope-check">&#10003;</span> Log Escalation Signatures</li>
             </ul>
         </div>
 
@@ -1364,9 +1414,9 @@ $btnExportHtml.Add_Click({
             <div class="matrix-grid">
                 <div class="matrix-item"><span>MRT Discovery</span> $(if ($data.MappingOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
                 <div class="matrix-item"><span>Public Services</span> $(if ($data.SvcOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Folders & Temp</span> $(if ($data.FolderOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Environment & Java</span> $(if ($data.EnvOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
-                <div class="matrix-item"><span>Wrapper Conf (4 Props)</span> $(if ($data.WrapperOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
+                <div class="matrix-item"><span>Folders &amp; Temp</span> $(if ($data.FolderOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
+                <div class="matrix-item"><span>Environment &amp; Java</span> $(if ($data.EnvOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
+                <div class="matrix-item"><span>Wrapper Configuration</span> $(if ($data.WrapperOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
                 <div class="matrix-item"><span>Critical Signatures</span> $(if ($data.TotalCritical -eq 0) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
             </div>
         </div>
