@@ -128,13 +128,20 @@ function Add-WrapperTable {
         $v2 = $PubParsed[$key]
 
         # Normalized URL handling (strip HTML & default SSL port :443)
+        $dispV1 = $v1
+        $dispV2 = $v2
         if ($key -eq "AnypointBaseUri") {
             $v1Norm = ($v1 -replace '<[^>]+>', '').Trim().TrimEnd('/') -replace ':443$', ''
             $v2Norm = ($v2 -replace '<[^>]+>', '').Trim().TrimEnd('/') -replace ':443$', ''
             if ($v1Norm -eq $v2Norm -and $v1Norm -notin @("Missing", "Not Configured")) {
                 $status = "[PASS]"
+                $region = if ($v1Norm -match '//([^\.]+)\.') { $matches[1] } else { "Valid" }
+                $dispV1 = "Configured ($region)"
+                $dispV2 = "Configured ($region)"
             } elseif ($v1Norm -in @("Missing", "Not Configured") -and $v2Norm -in @("Missing", "Not Configured")) {
                 $status = "[PASS]"
+                $dispV1 = "Not Configured"
+                $dispV2 = "Not Configured"
             } else {
                 $status = "[FAIL]"
                 $allPassed = $false
@@ -147,7 +154,7 @@ function Add-WrapperTable {
                 $allPassed = $false
             }
         }
-        $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f $key, $v1, $v2, $status))
+        $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f $key, $dispV1, $dispV2, $status))
     }
 
     # JavaTmpDir presence check
@@ -1326,18 +1333,128 @@ $btnExportHtml.Add_Click({
         .code-sample { font-family: Consolas, monospace; font-size: 11px; color: #fca5a5; background: #450a0a; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }
         pre { font-family: Consolas, 'Courier New', monospace; font-size: 12.5px; line-height: 1.5; color: #f9fafb; overflow-x: auto; margin: 0; }
 
-        /* Print-to-PDF Friendly CSS */
+        .clean-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #064e3b; border: 1px solid #059669; border-radius: 6px; margin-bottom: 12px; color: #ecfdf5; font-size: 13px; font-weight: 600; }
+
+        /* Print-to-PDF Friendly CSS (Strict 2-Page Executive Brief) */
         @media print {
-            body { background: #ffffff !important; color: #000000 !important; padding: 10px !important; }
-            .dashboard-header, .metric-card, .scope-card, .matrix-card, details, .section-content {
+            @page {
+                size: A4 portrait;
+                margin: 10mm 12mm;
+            }
+            body {
                 background: #ffffff !important;
                 color: #000000 !important;
-                border: 1px solid #cccccc !important;
-                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                font-size: 11px !important;
             }
-            .logo-title, .matrix-title, .scope-title, summary, td, th { color: #000000 !important; }
-            details { break-inside: avoid; }
-            summary { border-bottom: 1px solid #dddddd; }
+            .container { max-width: 100% !important; margin: 0 !important; }
+            .dashboard-header, .metric-card, .scope-card, .action-box, .matrix-card, details, .section-content {
+                background: #ffffff !important;
+                color: #000000 !important;
+                border: 1px solid #d1d5db !important;
+                box-shadow: none !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .dashboard-header { padding: 12px 18px !important; margin-bottom: 10px !important; }
+            .header-top { padding-bottom: 8px !important; margin-bottom: 10px !important; }
+            .logo-title { font-size: 16px !important; color: #111827 !important; }
+            .timestamp { color: #4b5563 !important; }
+            
+            .metrics-grid { gap: 8px !important; margin-bottom: 10px !important; }
+            .metric-card { padding: 8px 12px !important; }
+            .metric-label { color: #4b5563 !important; font-size: 10px !important; margin-bottom: 3px !important; }
+            .metric-value { font-size: 16px !important; color: #111827 !important; }
+            
+            .decision-banner { padding: 10px 14px !important; }
+            .decision-title { font-size: 10.5px !important; }
+            .decision-text { font-size: 20px !important; }
+            .decision-subtitle { font-size: 10px !important; }
+            
+            .scope-card { padding: 10px 14px !important; margin-bottom: 10px !important; }
+            .scope-title { color: #111827 !important; margin-bottom: 6px !important; }
+            .scope-list { line-height: 1.5 !important; font-size: 11.5px !important; gap: 4px !important; color: #374151 !important; }
+            
+            .action-box {
+                background: #f8fafc !important;
+                border: 1px solid #cbd5e1 !important;
+                border-left: 4px solid #4f46e5 !important;
+                padding: 10px 14px !important;
+                margin-bottom: 10px !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .action-title { color: #312e81 !important; margin-bottom: 4px !important; }
+            .action-list { color: #1e293b !important; }
+            
+            .amq-pill {
+                background: #f1f5f9 !important;
+                border: 1px solid #cbd5e1 !important;
+                color: #1e40af !important;
+                padding: 4px 8px !important;
+                font-size: 10.5px !important;
+            }
+            .amq-pill.active-listener {
+                background: #ecfdf5 !important;
+                border-color: #059669 !important;
+                color: #065f46 !important;
+            }
+            .amq-pill .pill-url { color: #475569 !important; }
+            .amq-pill.active-listener .pill-url { color: #047857 !important; }
+            
+            .matrix-card {
+                padding: 12px 14px !important;
+                margin-bottom: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: always !important;
+                break-after: page !important;
+            }
+            .matrix-title { color: #111827 !important; margin-bottom: 8px !important; }
+            .matrix-grid { gap: 8px !important; }
+            .matrix-item {
+                background: #f9fafb !important;
+                border: 1px solid #e5e7eb !important;
+                padding: 8px 12px !important;
+                min-height: 36px !important;
+                color: #111827 !important;
+                font-size: 12px !important;
+            }
+
+            details {
+                margin-bottom: 10px !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            summary {
+                color: #111827 !important;
+                background: #f3f4f6 !important;
+                border-bottom: 1px solid #e5e7eb !important;
+                padding: 8px 12px !important;
+                font-size: 12px !important;
+            }
+            .section-content {
+                background: #ffffff !important;
+                border-top: 1px solid #e5e7eb !important;
+                padding: 10px 12px !important;
+                display: block !important;
+            }
+            
+            table { font-size: 11px !important; }
+            th { background: #f3f4f6 !important; color: #374151 !important; padding: 6px 8px !important; }
+            td { color: #111827 !important; padding: 6px 8px !important; border-bottom: 1px solid #f3f4f6 !important; }
+            tr:hover td { background: transparent !important; }
+
+            .badge.pass { background: #d1fae5 !important; color: #065f46 !important; }
+            .badge.warn { background: #fef3c7 !important; color: #92400e !important; }
+            .badge.fail { background: #fee2e2 !important; color: #991b1b !important; }
+            .clean-banner { background: #d1fae5 !important; border: 1px solid #059669 !important; color: #065f46 !important; }
+
+            /* Strictly hide the 6-page plain-text dump in print so PDF is a 2-page brief */
+            .terminal-details {
+                display: none !important;
+            }
         }
     </style>
 </head>
@@ -1425,6 +1542,9 @@ $btnExportHtml.Add_Click({
         <details $critAccordionOpen>
             <summary>&bull; Critical Error Analysis (With Log File & Live Samples)</summary>
             <div class="section-content">
+                $(if ($data.TotalCritical -eq 0) {
+                    "<div class='clean-banner'><span class='badge pass'>PASS</span> <strong>All 9 Critical Escalation Signatures Clean:</strong> 0 occurrences detected across all scanned logs.</div>"
+                } else { "" })
                 <table>
                     <thead>
                         <tr><th style="width:230px;">Pattern</th><th style="width:90px;">Occurrences</th><th>Findings, Location & Sample Line</th></tr>
@@ -1473,7 +1593,7 @@ $btnExportHtml.Add_Click({
             </div>
         </details>
 
-        <details>
+        <details class="terminal-details">
             <summary>&bull; Complete Plain-Text Terminal Report (For INC Attachment)</summary>
             <div class="section-content">
                 <pre>$safeFullText</pre>

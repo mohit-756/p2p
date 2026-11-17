@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P2P Cutover — Design 1 · Dark Executive</title>
+<style>
+  /* ── Reset & Base ───────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0d1117;
+    color: #e2e8f0;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  /* ── Header ─────────────────────────────────────────── */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #21262d;
+  }
+  .brand { display: flex; flex-direction: column; gap: 4px; }
+  .brand-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #3b82f6;
+  }
+  .brand-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: #f0f6fc;
+    letter-spacing: -0.3px;
+  }
+  .meta { text-align: right; font-size: 11.5px; color: #6e7681; line-height: 1.6; }
+  .meta strong { color: #8b949e; }
+
+  /* ── Verdict Banner ──────────────────────────────────── */
+  .verdict {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #0d4429 0%, #0a3320 100%);
+    border: 1px solid #238636;
+    box-shadow: 0 0 24px rgba(35, 134, 54, 0.15);
+  }
+  .verdict-left {}
+  .verdict-eyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #3fb950;
+    margin-bottom: 4px;
+  }
+  .verdict-text {
+    font-size: 30px;
+    font-weight: 800;
+    color: #3fb950;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .verdict-sub {
+    font-size: 10.5px;
+    color: #56d364;
+    margin-top: 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .verdict-right {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .pill-pass {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #238636;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .verdict-failures { font-size: 12px; color: #56d364; font-weight: 600; }
+
+  /* ── 4×2 Metric Grid ─────────────────────────────────── */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 860px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+  .card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 16px 20px;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #388bfd44; }
+  .card-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #6e7681;
+    margin-bottom: 8px;
+  }
+  .card-value { font-size: 22px; font-weight: 800; color: #f0f6fc; line-height: 1.1; }
+  .card-sub { font-size: 11px; margin-top: 6px; color: #6e7681; }
+
+  .c-green { color: #3fb950; }
+  .c-blue  { color: #58a6ff; }
+  .c-teal  { color: #2dd4bf; }
+  .c-amber { color: #f1a019; }
+  .c-gray  { color: #8b949e; }
+  .c-white { color: #f0f6fc; }
+
+  /* ── Two-Column Row (Scope + Action) ─────────────────── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── Section Card ────────────────────────────────────── */
+  .section-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #8b949e;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #21262d;
+    padding-bottom: 10px;
+  }
+
+  /* ── Scope Checks ────────────────────────────────────── */
+  .scope-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+  }
+  .scope-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #c9d1d9;
+  }
+  .chk {
+    width: 18px;
+    height: 18px;
+    background: #0d4429;
+    border: 1.5px solid #238636;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #3fb950;
+  }
+
+  /* ── Action Box ──────────────────────────────────────── */
+  .action-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-left: 3px solid #818cf8;
+    border-radius: 10px;
+    padding: 18px 22px;
+  }
+  .action-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #818cf8;
+    margin-bottom: 10px;
+  }
+  .action-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 12.5px; color: #c9d1d9; }
+  .dot-pass { color: #3fb950; font-size: 10px; margin-top: 3px; }
+
+  .amq-pills { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .amq-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    padding: 8px 12px;
+    border-radius: 7px;
+    text-decoration: none;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11.5px;
+    color: #58a6ff;
+    transition: all 0.15s;
+  }
+  .amq-pill:hover { background: #161b22; border-color: #388bfd; color: #fff; }
+  .amq-pill.live {
+    border-color: #238636;
+    background: #0d2f1a;
+    color: #3fb950;
+    box-shadow: 0 0 10px rgba(35, 134, 54, 0.2);
+  }
+  .amq-pill.live:hover { background: #0a3320; }
+  .env-badge {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  .env-prod { background: #450a0a; color: #f87171; }
+  .env-qa   { background: #0d4429; color: #3fb950; }
+  .env-dev  { background: #172554; color: #93c5fd; }
+  .live-dot { font-size: 9px; color: #3fb950; }
+  .amq-url { font-size: 11px; color: #6e7681; flex: 1; }
+  .amq-pill.live .amq-url { color: #56d364; }
+
+  /* ── Decision Matrix ─────────────────────────────────── */
+  .matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 600px) { .matrix-grid { grid-template-columns: repeat(2, 1fr); } }
+  .mx-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #c9d1d9;
+    transition: border-color 0.15s;
+  }
+  .mx-item:hover { border-color: #30363d; }
+
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .b-pass { background: #1a4731; color: #3fb950; border: 1px solid #238636; }
+  .b-warn { background: #3d2000; color: #f1a019; border: 1px solid #9e6a03; }
+  .b-fail { background: #3d0000; color: #f87171; border: 1px solid #b22222; }
+  .b-info { background: #1c3461; color: #58a6ff; border: 1px solid #1f6feb; }
+
+  /* ── Accordions ──────────────────────────────────────── */
+  details {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  summary {
+    padding: 13px 20px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #c9d1d9;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    list-style: none;
+    user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '›'; font-size: 16px; color: #58a6ff; transition: transform 0.2s; display: inline-block; }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary:hover { background: #1c2128; }
+  .acc-content { padding: 0 20px 16px; border-top: 1px solid #21262d; padding-top: 14px; }
+
+  /* ── Summary Banner ──────────────────────────────────── */
+  .clean-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: #0d2f1a;
+    border: 1px solid #238636;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #3fb950;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  /* ── Table ───────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left;
+    padding: 9px 12px;
+    color: #6e7681;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #21262d;
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid #161b22; color: #c9d1d9; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+
+  /* ── Terminal Dump (screen only) ─────────────────────── */
+  pre {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #8b949e;
+    overflow-x: auto;
+    background: #0d1117;
+    padding: 14px;
+    border-radius: 6px;
+  }
+
+  /* ── Print: Strict 2-Page Certificate ───────────────── */
+  @media print {
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    body { background: #fff !important; color: #000 !important; padding: 0 !important; }
+    .container { max-width: 100% !important; }
+    .page-header { border-color: #e5e7eb !important; }
+    .brand-title { color: #2563eb !important; }
+    .brand-name  { color: #111827 !important; }
+    .meta { color: #6b7280 !important; }
+    .verdict {
+      background: #ecfdf5 !important;
+      border-color: #059669 !important;
+      box-shadow: none !important;
+      break-inside: avoid !important;
+    }
+    .verdict-eyebrow, .verdict-sub { color: #047857 !important; }
+    .verdict-text { color: #047857 !important; }
+    .pill-pass { background: #059669 !important; }
+    .verdict-failures { color: #047857 !important; }
+    .card {
+      background: #fff !important;
+      border: 1px solid #e5e7eb !important;
+      break-inside: avoid !important;
+    }
+    .card-label { color: #6b7280 !important; }
+    .card-value { color: #111827 !important; }
+    .card-sub { color: #9ca3af !important; }
+    .c-green { color: #047857 !important; }
+    .c-blue  { color: #1d4ed8 !important; }
+    .c-teal  { color: #0f766e !important; }
+    .section-card, .action-card {
+      background: #fff !important;
+      border: 1px solid #e5e7eb !important;
+      break-inside: avoid !important;
+    }
+    .section-title { color: #9ca3af !important; border-color: #e5e7eb !important; }
+    .scope-item { color: #374151 !important; }
+    .chk { background: #ecfdf5 !important; border-color: #059669 !important; color: #047857 !important; }
+    .action-label { color: #4f46e5 !important; }
+    .action-row { color: #374151 !important; }
+    .amq-pill {
+      background: #f8fafc !important;
+      border: 1px solid #e2e8f0 !important;
+      color: #2563eb !important;
+      break-inside: avoid !important;
+    }
+    .amq-pill.live { background: #ecfdf5 !important; border-color: #059669 !important; color: #047857 !important; }
+    .amq-url { color: #6b7280 !important; }
+    .amq-pill.live .amq-url { color: #047857 !important; }
+    .matrix-grid details .mx-item {
+      background: #f9fafb !important;
+      border: 1px solid #e5e7eb !important;
+      color: #111827 !important;
+    }
+    .mx-item { background: #f9fafb !important; border: 1px solid #e5e7eb !important; color: #111827 !important; }
+    .b-pass { background: #d1fae5 !important; color: #047857 !important; border-color: #059669 !important; }
+    .b-warn { background: #fef3c7 !important; color: #92400e !important; border-color: #d97706 !important; }
+    .b-fail { background: #fee2e2 !important; color: #991b1b !important; border-color: #dc2626 !important; }
+    details { background: #fff !important; border: 1px solid #e5e7eb !important; break-inside: avoid !important; }
+    summary { background: #f9fafb !important; color: #374151 !important; border-color: #e5e7eb !important; }
+    .acc-content { border-color: #e5e7eb !important; }
+    .clean-banner { background: #ecfdf5 !important; border-color: #059669 !important; color: #047857 !important; }
+    table { font-size: 10.5px !important; }
+    th { color: #6b7280 !important; border-color: #e5e7eb !important; }
+    td { color: #374151 !important; border-color: #f3f4f6 !important; }
+    tr:hover td { background: transparent !important; }
+    /* Hide the 6-page terminal text dump in PDF */
+    .terminal-section { display: none !important; }
+    /* Ensure matrix is last item on page 1 — page break before tech evidence */
+    .tech-evidence { page-break-before: always !important; break-before: page !important; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ── Header ──────────────────────────────────────── -->
+  <header class="page-header">
+    <div class="brand">
+      <div class="brand-title">JDA Connect · P2P Migration Validator v8.0</div>
+      <div class="brand-name">P2P Cutover Decision</div>
+    </div>
+    <div class="meta">
+      <strong>Generated:</strong> 2026-11-17 11:33:58<br>
+      <strong>Validation Duration:</strong> 15.37s<br>
+      <strong>Mode:</strong> Read-Only · 0 Files Modified
+    </div>
+  </header>
+
+  <!-- ── Verdict ──────────────────────────────────────── -->
+  <div class="verdict">
+    <div class="verdict-left">
+      <div class="verdict-eyebrow">Recommended Cutover Decision</div>
+      <div class="verdict-text">READY FOR CUTOVER</div>
+      <div class="verdict-sub">Read Only Validation &bull; No Files Modified &bull; No Services Restarted</div>
+    </div>
+    <div class="verdict-right">
+      <span class="pill-pass">&#10003; 0 Failures Detected</span>
+      <div class="verdict-failures">Risk Level: LOW</div>
+    </div>
+  </div>
+
+  <!-- ── 4 × 2 Metric Grid ─────────────────────────────── -->
+  <div class="metrics">
+    <div class="card">
+      <div class="card-label">Customer / INC</div>
+      <div class="card-value c-white" style="font-size:19px;">ikea</div>
+      <div class="card-sub">INC not provided (N/A)</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Servers (Ref → Pub)</div>
+      <div class="card-value c-blue" style="font-size:13px;line-height:1.5;">tsbi631702001<br>→ tsbi631702003</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Server Access</div>
+      <div class="card-value" style="font-size:13px;line-height:1.6;">
+        <span class="c-green">&#10003; REF Reachable</span><br>
+        <span class="c-green">&#10003; PUB Reachable</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">MRT Match</div>
+      <div class="card-value c-green">6 / 6</div>
+      <div class="card-sub">All MRTs matched</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Wrapper (4 Props)</div>
+      <div class="card-value c-green">6 / 6 PASS</div>
+      <div class="card-sub">Oracle JDBC · Gatekeeper · Base URI · TmpDir</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active MQ</div>
+      <div class="card-value c-green">INSTALLED</div>
+      <div class="card-sub c-teal" style="font-family:Consolas,monospace;">31080</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Differences</div>
+      <div class="card-value c-green">0</div>
+      <div class="card-sub">No reference gaps</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Risk Level</div>
+      <div class="card-value c-green" style="font-size:28px;">LOW</div>
+    </div>
+  </div>
+
+  <!-- ── Scope + Action two-col ────────────────────────── -->
+  <div class="two-col">
+    <div class="section-card" style="margin-bottom:0;">
+      <div class="section-title">Validation Scope</div>
+      <div class="scope-grid">
+        <div class="scope-item"><div class="chk">&#10003;</div> MRT Mapping</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> Services &amp; Accounts</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> Wrapper Configuration</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> Temp Folders</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> ActiveMQ Discovery</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> Environment &amp; Java</div>
+        <div class="scope-item"><div class="chk">&#10003;</div> Log Escalation Signatures</div>
+      </div>
+    </div>
+
+    <div class="action-card">
+      <div class="action-label">Action Required Before Sign-off</div>
+      <div class="action-row"><span class="dot-pass">&#9679;</span> <span><span class="badge b-pass">PASS</span> No Wrapper Issues Detected</span></div>
+      <div class="action-row"><span class="dot-pass">&#9679;</span> <span><span class="badge b-pass">PASS</span> No Reference Differences Detected</span></div>
+      <div style="font-size:11.5px;color:#6e7681;margin:10px 0 6px;font-weight:600;">ActiveMQ Console URLs — Manual Verification:</div>
+      <div class="amq-pills">
+        <a href="http://tsbi631702003:11080/index.html" target="_blank" class="amq-pill">
+          <span class="env-badge env-prod">PROD</span>
+          <span class="amq-url">tsbi631702003:11080</span>
+        </a>
+        <a href="http://tsbi631702003:31080/index.html" target="_blank" class="amq-pill live">
+          <span class="env-badge env-qa">QA</span>
+          <span class="live-dot">&#9679; LISTENING</span>
+          <span class="amq-url">tsbi631702003:31080</span>
+        </a>
+        <a href="http://tsbi631702003:51080/index.html" target="_blank" class="amq-pill">
+          <span class="env-badge env-dev">DEV</span>
+          <span class="amq-url">tsbi631702003:51080</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Cutover Decision Matrix ───────────────────────── -->
+  <div class="section-card">
+    <div class="section-title">Cutover Decision Matrix</div>
+    <div class="matrix-grid">
+      <div class="mx-item"><span>MRT Discovery</span>     <span class="badge b-pass">PASS</span></div>
+      <div class="mx-item"><span>Public Services</span>   <span class="badge b-pass">PASS</span></div>
+      <div class="mx-item"><span>Folders &amp; Temp</span><span class="badge b-pass">PASS</span></div>
+      <div class="mx-item"><span>Environment &amp; Java</span><span class="badge b-pass">PASS</span></div>
+      <div class="mx-item"><span>Wrapper Configuration</span><span class="badge b-pass">PASS</span></div>
+      <div class="mx-item"><span>Critical Signatures</span><span class="badge b-pass">PASS</span></div>
+    </div>
+  </div>
+
+  <!-- ── TECH EVIDENCE (Page 2 in print) ───────────────── -->
+  <div class="tech-evidence">
+
+    <!-- Critical Signatures -->
+    <details>
+      <summary>Critical Error Signatures Analysis</summary>
+      <div class="acc-content">
+        <div class="clean-banner">
+          <span class="badge b-pass">PASS</span>
+          <strong>All 9 Critical Signatures Clean</strong> — 0 occurrences detected across all scanned logs.
+        </div>
+        <table>
+          <thead><tr><th>Pattern</th><th>Occurrences</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>OutOfMemoryError</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>BindException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>AccessDeniedException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>UnknownHostException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>ConnectException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>SSLException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>ORA-</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>Permission denied</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>FileNotFoundException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Actionable Log Findings -->
+    <details open>
+      <summary>Actionable Log Findings <span class="badge b-warn" style="margin-left:8px;font-size:10px;">6 Apps · Log Warnings</span></summary>
+      <div class="acc-content">
+        <table>
+          <thead><tr><th>Application</th><th>Log File</th><th>Errors</th><th>Fatals</th><th>Exceptions</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>JDAConnect-GGMST</td><td style="font-family:Consolas,monospace;font-size:11px;">mule_ee_ggmst.log</td><td>36</td><td>0</td><td>42</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-E</td><td style="font-family:Consolas,monospace;font-size:11px;">mule_ee_ggpri-e.log</td><td>35</td><td>0</td><td>69</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-E</td><td style="font-family:Consolas,monospace;font-size:11px;">jda-ion-eapi.log</td><td>5</td><td>0</td><td>0</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-P</td><td style="font-family:Consolas,monospace;font-size:11px;">mule_ee_ggpri-p.log</td><td>8</td><td>0</td><td>0</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-S</td><td style="font-family:Consolas,monospace;font-size:11px;">jda-fso-sapi-hr.log</td><td>15</td><td>0</td><td>14</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-S</td><td style="font-family:Consolas,monospace;font-size:11px;">jda-fso-sapi-hr-10.log</td><td>13</td><td>0</td><td>27</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-SCPO</td><td style="font-family:Consolas,monospace;font-size:11px;">mule_ee_ggpri-scpo.log</td><td>7</td><td>0</td><td>2</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGPRI-SCPO</td><td style="font-family:Consolas,monospace;font-size:11px;">jda-ikea-scpo-adapter.log</td><td>7</td><td>0</td><td>20</td><td><span class="badge b-warn">WARN</span></td></tr>
+            <tr><td>JDAConnect-GGSVC</td><td style="font-family:Consolas,monospace;font-size:11px;">mule_ee_ggsvc.log</td><td>37</td><td>0</td><td>72</td><td><span class="badge b-warn">WARN</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Public Services -->
+    <details>
+      <summary>Public Server Services &amp; Accounts</summary>
+      <div class="acc-content">
+        <table>
+          <thead><tr><th>Service Name</th><th>State</th><th>Start Mode</th><th>Logon Account</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>mule_ee_ggmst</td><td><span class="badge b-pass">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>mule_ee_ggpri-e</td><td><span class="badge b-pass">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>mule_ee_ggpri-p</td><td><span class="badge b-pass">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>mule_ee_ggpri-s</td><td><span class="badge b-pass">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>mule_ee_ggpri-scpo</td><td><span class="badge b-pass">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+            <tr><td>mule_ee_ggsvc</td><td><span class="badge b-pass">Running</span></td><td>Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Reference Differences -->
+    <details>
+      <summary>Reference Differences &amp; Mismatches</summary>
+      <div class="acc-content">
+        <div class="clean-banner">
+          <span class="badge b-pass">PASS</span>
+          <strong>No Differences Detected</strong> — Only On Reference: None &nbsp;&bull;&nbsp; Only On Public: None &nbsp;&bull;&nbsp; Missing On Public: None
+        </div>
+      </div>
+    </details>
+
+    <!-- Terminal Report (screen only) -->
+    <details class="terminal-section">
+      <summary>Complete Plain-Text Report (For INC Attachment)</summary>
+      <div class="acc-content">
+        <pre>
+====================================================================================
+P2P MIGRATION VALIDATION REPORT v8.0           [MODE: STRICTLY READ-ONLY]
+====================================================================================
+Customer : ikea                      INC     : N/A
+Reference: tsbi631702001             Public  : tsbi631702003
+Date     : 2026-11-17 11:33:58       Changes : 0 Files / 0 Services Modified
+...
+[Full terminal output would appear here — hidden from PDF]
+        </pre>
+      </div>
+    </details>
+
+  </div><!-- .tech-evidence -->
+
+</div><!-- .container -->
+</body>
+</html>
