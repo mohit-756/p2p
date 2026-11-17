@@ -38,19 +38,19 @@ function Parse-WrapperConf {
     param([string[]]$Content)
     
     $result = @{
-        InitMemory           = "Missing"
-        MaxMemory            = "Missing"
-        MetaspaceSize        = "Missing"
-        MaxMetaspaceSize     = "Missing"
-        JmxRemote            = "Missing"
-        JmxPort              = "Missing"
-        JmxAuth              = "Missing"
-        JmxSsl               = "Missing"
-        RmiPort              = "Missing"
-        OracleJdbcCompliance = "Missing"
-        AnypointGatekeeper   = "Missing"
-        AnypointBaseUri      = "Missing"
-        JavaTmpDir           = "Missing"
+        InitMemory            = "Missing"
+        MaxMemory             = "Missing"
+        MetaspaceSize         = "Missing"
+        MaxMetaspaceSize      = "Missing"
+        JmxRemote             = "Missing"
+        JmxPort               = "Missing"
+        JmxAuth               = "Missing"
+        JmxSsl                = "Missing"
+        RmiPort               = "Missing"
+        OracleJdbcCompliance  = "Not Configured"
+        AnypointGatekeeper    = "Not Configured"
+        AnypointBaseUri       = "Not Configured"
+        JavaTmpDir            = "Not Configured"
     }
     
     if (-not $Content) { return $result }
@@ -61,16 +61,16 @@ function Parse-WrapperConf {
         if ($line.StartsWith("#") -or [string]::IsNullOrWhiteSpace($line)) { continue }
 
         if ($line -match "^wrapper\.java\.initmemory\s*=\s*(.+)$") { $result.InitMemory = $matches[1].Trim() }
-        if ($line -match "^wrapper\.java\.maxmemory\s*=\s*(.+)$") { $result.MaxMemory = $matches[1].Trim() }
-        if ($line -match "-XX:MetaspaceSize\s*=\s*(.+)$") { $result.MetaspaceSize = $matches[1].Trim() }
-        if ($line -match "-XX:MaxMetaspaceSize\s*=\s*(.+)$") { $result.MaxMetaspaceSize = $matches[1].Trim() }
+        if ($line -match "^wrapper\.java\.maxmemory\s*=\s*(.+)$")  { $result.MaxMemory = $matches[1].Trim() }
+        if ($line -match "-XX:MetaspaceSize\s*=\s*(.+)$")          { $result.MetaspaceSize = $matches[1].Trim() }
+        if ($line -match "-XX:MaxMetaspaceSize\s*=\s*(.+)$")       { $result.MaxMetaspaceSize = $matches[1].Trim() }
         
-        if ($line -match "-Dcom\.sun\.management\.jmxremote$") { $result.JmxRemote = "Enabled" }
-        if ($line -match "-Dcom\.sun\.management\.jmxremote\s*=\s*(.+)$") { $result.JmxRemote = $matches[1].Trim() }
-        if ($line -match "-Dcom\.sun\.management\.jmxremote\.port\s*=\s*(.+)$") { $result.JmxPort = $matches[1].Trim() }
+        if ($line -match "-Dcom\.sun\.management\.jmxremote$")                          { $result.JmxRemote = "Enabled" }
+        if ($line -match "-Dcom\.sun\.management\.jmxremote\s*=\s*(.+)$")               { $result.JmxRemote = $matches[1].Trim() }
+        if ($line -match "-Dcom\.sun\.management\.jmxremote\.port\s*=\s*(.+)$")         { $result.JmxPort = $matches[1].Trim() }
         if ($line -match "-Dcom\.sun\.management\.jmxremote\.authenticate\s*=\s*(.+)$") { $result.JmxAuth = $matches[1].Trim() }
-        if ($line -match "-Dcom\.sun\.management\.jmxremote\.ssl\s*=\s*(.+)$") { $result.JmxSsl = $matches[1].Trim() }
-        if ($line -match "-Dcom\.sun\.management\.jmxremote\.rmi\.port\s*=\s*(.+)$") { $result.RmiPort = $matches[1].Trim() }
+        if ($line -match "-Dcom\.sun\.management\.jmxremote\.ssl\s*=\s*(.+)$")          { $result.JmxSsl = $matches[1].Trim() }
+        if ($line -match "-Dcom\.sun\.management\.jmxremote\.rmi\.port\s*=\s*(.+)$")    { $result.RmiPort = $matches[1].Trim() }
 
         if ($line -match '-Doracle\.jdbc\.J2EE13Compliant=(.+)$') { $result.OracleJdbcCompliance = $matches[1].Trim() }
         if ($line -match '-Danypoint\.platform\.gatekeeper=(.+)$') { $result.AnypointGatekeeper = $matches[1].Trim() }
@@ -114,7 +114,7 @@ function Add-WrapperTable {
     $Report.Add(("-" * 84))
 
     $PrivParsed = Parse-WrapperConf -Content $PrivContent
-    $PubParsed = Parse-WrapperConf -Content $PubContent
+    $PubParsed  = Parse-WrapperConf -Content $PubContent
     
     $keys = @(
         "InitMemory", "MaxMemory", "MetaspaceSize", "MaxMetaspaceSize",
@@ -131,22 +131,18 @@ function Add-WrapperTable {
         if ($key -eq "AnypointBaseUri") {
             $v1Norm = ($v1 -replace '<[^>]+>', '').Trim().TrimEnd('/') -replace ':443$', ''
             $v2Norm = ($v2 -replace '<[^>]+>', '').Trim().TrimEnd('/') -replace ':443$', ''
-            if ($v1Norm -eq $v2Norm -and $v1Norm -ne "Missing") {
+            if ($v1Norm -eq $v2Norm -and $v1Norm -notin @("Missing", "Not Configured")) {
                 $status = "[PASS]"
-            }
-            elseif ($v1Norm -eq "Missing" -and $v2Norm -eq "Missing") {
+            } elseif ($v1Norm -in @("Missing", "Not Configured") -and $v2Norm -in @("Missing", "Not Configured")) {
                 $status = "[PASS]"
-            }
-            else {
+            } else {
                 $status = "[FAIL]"
                 $allPassed = $false
             }
-        }
-        else {
+        } else {
             if ($v1 -eq $v2) {
                 $status = "[PASS]"
-            }
-            else {
+            } else {
                 $status = "[FAIL]"
                 $allPassed = $false
             }
@@ -155,19 +151,16 @@ function Add-WrapperTable {
     }
 
     # JavaTmpDir presence check
-    $pTmp = ($PrivParsed.JavaTmpDir -ne "Missing" -and -not [string]::IsNullOrWhiteSpace($PrivParsed.JavaTmpDir))
-    $nTmp = ($PubParsed.JavaTmpDir -ne "Missing" -and -not [string]::IsNullOrWhiteSpace($PubParsed.JavaTmpDir))
+    $pTmp = ($PrivParsed.JavaTmpDir -notin @("Missing", "Not Configured") -and -not [string]::IsNullOrWhiteSpace($PrivParsed.JavaTmpDir))
+    $nTmp = ($PubParsed.JavaTmpDir -notin @("Missing", "Not Configured") -and -not [string]::IsNullOrWhiteSpace($PubParsed.JavaTmpDir))
     if ($pTmp -and $nTmp) {
         $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f "JavaTmpDir (Presence)", "Configured", "Configured", "[PASS]"))
-    }
-    elseif (-not $pTmp -and -not $nTmp) {
+    } elseif (-not $pTmp -and -not $nTmp) {
         $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f "JavaTmpDir (Presence)", "Not Set", "Not Set", "[PASS]"))
-    }
-    elseif ($pTmp -and -not $nTmp) {
+    } elseif ($pTmp -and -not $nTmp) {
         $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f "JavaTmpDir (Presence)", "Configured", "Missing", "[FAIL]"))
         $allPassed = $false
-    }
-    else {
+    } else {
         $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f "JavaTmpDir (Presence)", "Not Set", "Configured", "[INFO]"))
     }
 
@@ -193,19 +186,19 @@ $CollectorScriptBlock = {
             if (Test-Path $p) { return $p }
 
             $match = Get-ChildItem -Path $d -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ieq $FolderName -or $_.Name -like "*$FolderName*" } |
-            Select-Object -First 1
+                     Where-Object { $_.Name -ieq $FolderName -or $_.Name -like "*$FolderName*" } |
+                     Select-Object -First 1
             if ($match) { return $match.FullName }
         }
         return $null
     }
 
     $runningSvcs = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue |
-        Where-Object { $_.State -eq 'Running' -and $_.Name -like 'mule_ee_*' })
+                     Where-Object { $_.State -eq 'Running' -and $_.Name -like 'mule_ee_*' })
 
     $applications = @()
-    $logResults = @()
-    $criticalMap = @{}
+    $logResults   = @()
+    $criticalMap  = @{}
     $CriticalPatterns = @(
         "OutOfMemoryError", "BindException", "AccessDeniedException",
         "UnknownHostException", "ConnectException", "SSLException",
@@ -218,8 +211,7 @@ $CollectorScriptBlock = {
     foreach ($svc in $runningSvcs) {
         if ($svc.PathName -match '^"([^"]+)"') {
             $exePath = $matches[1]
-        }
-        else {
+        } else {
             $exePath = ($svc.PathName -split '\s+')[0]
         }
 
@@ -247,10 +239,10 @@ $CollectorScriptBlock = {
                 if ($found) { $wrapFile = $found.FullName }
             }
         }
-        $wrapExists = [bool]$wrapFile
+        $wrapExists  = [bool]$wrapFile
         $wrapContent = if ($wrapFile -and (Test-Path $wrapFile)) { @(Get-Content $wrapFile -ErrorAction SilentlyContinue) } else { @() }
 
-        # Log & Critical Pattern Scanning (Public Server Only)
+        # Log & Critical Pattern Scanning (Public Server Only - Strictly active *.log files, ignoring rollovers *.log.1)
         $logsExist = $false
         $logFilesCount = 0
         if ($Role -eq 'Public') {
@@ -262,25 +254,25 @@ $CollectorScriptBlock = {
             $appFolder = if ($runtimeRoot) { Split-Path $runtimeRoot -Leaf } else { "Unknown" }
 
             if ($logsExist) {
-                # Scan only current active log and latest roll-over (.log.1), top 2
+                # Scan only current active *.log files (excludes old rollovers like .log.1, .log.2)
                 $targetLogs = $logFiles |
-                Where-Object {
-                    ($_.Name -match '\.log$' -or $_.Name -match '\.log\.1$') -and
-                    $_.Name -notmatch '(?i)gc' -and
-                    $_.Name -notmatch '(?i)jvm-gc' -and
-                    $_.Name -notmatch '(?i)^mule_agent' -and
-                    $_.Name -notmatch '(?i)^mule-domain-default' -and
-                    $_.Name -notmatch '(?i)^wrapper' -and
-                    $_.Name -notmatch '(?i)^startup'
-                } |
-                Sort-Object LastWriteTime -Descending |
-                Select-Object -First 2
+                    Where-Object {
+                        $_.Name -match '\.log$' -and
+                        $_.Name -notmatch '(?i)gc' -and
+                        $_.Name -notmatch '(?i)jvm-gc' -and
+                        $_.Name -notmatch '(?i)^mule_agent' -and
+                        $_.Name -notmatch '(?i)^mule-domain-default' -and
+                        $_.Name -notmatch '(?i)^wrapper' -and
+                        $_.Name -notmatch '(?i)^startup'
+                    } |
+                    Sort-Object LastWriteTime -Descending |
+                    Select-Object -First 2
 
                 foreach ($log in $targetLogs) {
-                    $content = Get-Content $log.FullName -Tail 500 -ErrorAction SilentlyContinue
-                    $errCount = @($content | Select-String '\bERROR\b').Count
+                    $content    = Get-Content $log.FullName -Tail 500 -ErrorAction SilentlyContinue
+                    $errCount   = @($content | Select-String '\bERROR\b').Count
                     $fatalCount = @($content | Select-String '\bFATAL\b').Count
-                    $exCount = @($content | Select-String '\bException\b').Count
+                    $exCount    = @($content | Select-String '\bException\b').Count
 
                     $logResults += [PSCustomObject]@{
                         ServiceName = $svc.Name
@@ -300,7 +292,7 @@ $CollectorScriptBlock = {
                             if ([string]::IsNullOrWhiteSpace($criticalMap[$pat].Sample)) {
                                 $sampleLine = $matches[0].Line.Trim()
                                 if ($sampleLine.Length -gt 130) { $sampleLine = $sampleLine.Substring(0, 127) + "..." }
-                                $criticalMap[$pat].Sample = $sampleLine
+                                $criticalMap[$pat].Sample  = $sampleLine
                                 $criticalMap[$pat].LogFile = $log.Name
                             }
                         }
@@ -339,31 +331,30 @@ $CollectorScriptBlock = {
         $folderPaths[$f] = Find-Folder -FolderName $f -PreferredDrive $prefDrive
     }
 
-    $cpsPath = $folderPaths["JConn_CPS"]
+    $cpsPath  = $folderPaths["JConn_CPS"]
     $cpsCount = if ($cpsPath -and (Test-Path $cpsPath)) { @(Get-ChildItem $cpsPath -Directory -ErrorAction SilentlyContinue).Count } else { 0 }
 
-    $tempRootPath = Find-Folder -FolderName "Temp" -PreferredDrive $prefDrive
+    $tempRootPath   = Find-Folder -FolderName "Temp" -PreferredDrive $prefDrive
     $tempRootExists = [bool]($tempRootPath -and (Test-Path $tempRootPath))
 
     $tempSubDirs = if ($tempRootExists) {
         @(Get-ChildItem -Path $tempRootPath -Directory -ErrorAction SilentlyContinue)
-    }
-    else { @() }
+    } else { @() }
 
     foreach ($app in $applications) {
-        $normApp = ($app.ServiceName -replace '^mule_ee_', '').Replace('-', '').Replace('_', '').Replace(' ', '').ToUpperInvariant()
+        $normApp = ($app.ServiceName -replace '^mule_ee_', '').Replace('-','').Replace('_','').Replace(' ','').ToUpperInvariant()
         $normApp = $normApp -replace '\d+$', ''
 
         $foundTemp = $null
         foreach ($td in $tempSubDirs) {
-            $normTd = ($td.Name -replace '^mule_ee_', '').Replace('-', '').Replace('_', '').Replace(' ', '').ToUpperInvariant()
+            $normTd = ($td.Name -replace '^mule_ee_', '').Replace('-','').Replace('_','').Replace(' ','').ToUpperInvariant()
             $normTd = $normTd -replace '\d+$', ''
             if ($normTd -eq $normApp) {
                 $foundTemp = $td.FullName
                 break
             }
         }
-        $app.TempPath = if ($foundTemp) { $foundTemp } else { if ($tempRootPath) { Join-Path $tempRootPath $app.ServiceName } else { $null } }
+        $app.TempPath   = if ($foundTemp) { $foundTemp } else { if ($tempRootPath) { Join-Path $tempRootPath $app.ServiceName } else { $null } }
         $app.TempExists = [bool]$foundTemp
     }
 
@@ -373,42 +364,32 @@ $CollectorScriptBlock = {
         $amqFolders += @(Get-ChildItem $sd -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "AMQ|ActiveMQ" } | Select-Object -ExpandProperty FullName)
     }
 
-    # Public-specific environment metrics & AMQ reachability
+    # ActiveMQ Listener Detection
+    $AmqListeningPorts = @()
+    foreach($Port in @(11080,31080,51080)){
+        $listener = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+        if($listener){
+            $AmqListeningPorts += $Port
+        }
+    }
+
+    # Public-specific environment metrics
     $pubMetrics = @{}
     if ($Role -eq 'Public') {
         $javaVer = try { (java -version 2>&1 | Select-Object -First 1).ToString() } catch { "Not Found" }
         $javaExe = (Get-Command java -ErrorAction SilentlyContinue).Source
         $cpu = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $os  = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
         $totalMem = if ($os) { $os.TotalVisibleMemorySize / 1MB } else { 0 }
-        $freeMem = if ($os) { [math]::Round(($os.FreePhysicalMemory / 1MB), 2) } else { 0 }
+        $freeMem  = if ($os) { [math]::Round(($os.FreePhysicalMemory / 1MB), 2) } else { 0 }
         $memUsage = if ($totalMem -gt 0) { [math]::Round((($totalMem - $freeMem) / $totalMem) * 100, 0) } else { 0 }
 
-        $targetDriveLetter = if ($prefDrive) { ($prefDrive -replace '[:\\]', '').Trim() } else { "F" }
+        $targetDriveLetter = if ($prefDrive) { ($prefDrive -replace '[:\\]','').Trim() } else { "F" }
         $disk = Get-PSDrive -Name $targetDriveLetter -ErrorAction SilentlyContinue
         if (-not $disk) { $disk = Get-PSDrive -Name "F" -ErrorAction SilentlyContinue }
         if (-not $disk) { $disk = Get-PSDrive -Name "D" -ErrorAction SilentlyContinue }
         if (-not $disk) { $disk = Get-PSDrive -Name "C" -ErrorAction SilentlyContinue }
         $diskFree = if ($disk) { [math]::Round(($disk.Free / 1GB), 2) } else { 0 }
-
-        $AmqReachable = $false
-        $AmqPortFound = ""
-        $AmqUrlFound = ""
-        foreach ($Port in @(11080, 31080, 51080)) {
-            $tcpOk = $false
-            try {
-                $t = Test-NetConnection -ComputerName "127.0.0.1" -Port $Port -WarningAction SilentlyContinue
-                if ($t -and $t.TcpTestSucceeded) { $tcpOk = $true }
-            }
-            catch {}
-
-            if ($tcpOk) {
-                $AmqReachable = $true
-                $AmqPortFound = $Port
-                $AmqUrlFound = "http://$($env:COMPUTERNAME):$Port/index.html"
-                break
-            }
-        }
 
         $criticalList = @()
         foreach ($pat in $CriticalPatterns) {
@@ -429,24 +410,22 @@ $CollectorScriptBlock = {
             FreeMem      = $freeMem
             DiskFree     = $diskFree
             DriveName    = if ($disk) { $disk.Name } else { "N/A" }
-            AmqReachable = $AmqReachable
-            AmqPortFound = $AmqPortFound
-            AmqUrlFound  = $AmqUrlFound
             LogResults   = $logResults
             CriticalList = $criticalList
         }
     }
 
     [PSCustomObject]@{
-        Role         = $Role
-        Applications = $applications
-        FolderPaths  = $folderPaths
-        CPSCount     = $cpsCount
-        TempRoot     = $tempRootExists
-        TempRootPath = $tempRootPath
-        AmqFolders   = $amqFolders
-        PrefDrive    = $prefDrive
-        Metrics      = $pubMetrics
+        Role              = $Role
+        Applications      = $applications
+        FolderPaths       = $folderPaths
+        CPSCount          = $cpsCount
+        TempRoot          = $tempRootExists
+        TempRootPath      = $tempRootPath
+        AmqFolders        = $amqFolders
+        AmqListeningPorts = $AmqListeningPorts
+        PrefDrive         = $prefDrive
+        Metrics           = $pubMetrics
     }
 }
 
@@ -499,9 +478,9 @@ function New-CompactInput ($LabelText, $LblX, $TxtX, $Width) {
 }
 
 $txtCustomer = New-CompactInput "Customer:" 12 76 110
-$txtINC = New-CompactInput "INC:" 200 233 110
-$txtOld = New-CompactInput "Reference:" 358 425 175
-$txtNew = New-CompactInput "Public:" 618 668 175
+$txtINC      = New-CompactInput "INC:" 200 233 110
+$txtOld      = New-CompactInput "Reference:" 358 425 175
+$txtNew      = New-CompactInput "Public:" 618 668 175
 
 $grpOutput = New-Object System.Windows.Forms.GroupBox -Property @{
     Text      = "Validation & Cutover Report"
@@ -538,11 +517,11 @@ function New-ActionBtn ($Text, $X, $Width, $Color) {
     return $btn
 }
 
-$btnRun = New-ActionBtn "Run Validation" 16 145 ([System.Drawing.Color]::ForestGreen)
+$btnRun        = New-ActionBtn "Run Validation" 16 145 ([System.Drawing.Color]::ForestGreen)
 $btnExportHtml = New-ActionBtn "Export HTML" 170 135 ([System.Drawing.Color]::RoyalBlue)
-$btnExportTxt = New-ActionBtn "Export TXT" 314 125 ([System.Drawing.Color]::SteelBlue)
-$btnCopyInc = New-ActionBtn "Copy INC Summary" 448 145 ([System.Drawing.Color]::DarkSlateBlue)
-$btnClear = New-ActionBtn "Clear" 602 100 ([System.Drawing.Color]::IndianRed)
+$btnExportTxt  = New-ActionBtn "Export TXT" 314 125 ([System.Drawing.Color]::SteelBlue)
+$btnCopyInc    = New-ActionBtn "Copy INC Summary" 448 145 ([System.Drawing.Color]::DarkSlateBlue)
+$btnClear      = New-ActionBtn "Clear" 602 100 ([System.Drawing.Color]::IndianRed)
 
 $statusBar = New-Object System.Windows.Forms.StatusStrip -Property @{
     BackColor  = [System.Drawing.Color]::FromArgb(38, 38, 42)
@@ -567,27 +546,28 @@ $form.Controls.AddRange(@($lblHeader, $grpInput, $grpOutput, $statusBar))
 # ==========================================================
 
 $btnClear.Add_Click({
-        $output.Clear()
-        $txtCustomer.Clear()
-        $txtINC.Clear()
-        $txtOld.Clear()
-        $txtNew.Clear()
-        $statusPill.Text = "[ READY ]"
-        $statusPill.ForeColor = [System.Drawing.Color]::LightGray
-        $statusText.Text = "Enter server names and click Run Validation"
-    })
+    $output.Clear()
+    $txtCustomer.Clear()
+    $txtINC.Clear()
+    $txtOld.Clear()
+    $txtNew.Clear()
+    $statusPill.Text = "[ READY ]"
+    $statusPill.ForeColor = [System.Drawing.Color]::LightGray
+    $statusText.Text = "Enter server names and click Run Validation"
+})
 
 $btnCopyInc.Add_Click({
-        if ($null -eq $script:LastReportData) {
-            [System.Windows.Forms.MessageBox]::Show("Run validation first before copying summary.", "No Data") | Out-Null
-            return
-        }
-        $d = $script:LastReportData
-        $summary = @"
+    if ($null -eq $script:LastReportData) {
+        [System.Windows.Forms.MessageBox]::Show("Run validation first before copying summary.", "No Data") | Out-Null
+        return
+    }
+    $d = $script:LastReportData
+    $custIncLine = if ([string]::IsNullOrWhiteSpace($d.INC)) { $d.Customer } else { "$($d.Customer) (INC: $($d.INC))" }
+    $summary = @"
 ==================================================
 P2P MIGRATION CUTOVER SUMMARY
 ==================================================
-Customer    : $($d.Customer) (INC: $($d.INC))
+Customer    : $custIncLine
 Reference   : $($d.ReferenceServer)
 Public      : $($d.PublicServer)
 MRTs Matched: $($d.MatchedPairs.Count) / $($d.PrivData.Applications.Count)
@@ -598,26 +578,25 @@ Criticals   : $($d.TotalCritical)
 Generated   : $($d.Timestamp)
 ==================================================
 "@
-        [System.Windows.Forms.Clipboard]::SetText($summary)
-        $statusText.Text = "Executive INC summary copied to clipboard!"
-    })
+    [System.Windows.Forms.Clipboard]::SetText($summary)
+    $statusText.Text = "Executive INC summary copied to clipboard!"
+})
 
 $btnExportTxt.Add_Click({
-        if ([string]::IsNullOrWhiteSpace($output.Text)) {
-            [System.Windows.Forms.MessageBox]::Show("There is no report to export.", "Nothing to Export") | Out-Null
-            return
-        }
-        try {
-            $cust = if ($txtCustomer.Text.Trim()) { ($txtCustomer.Text.Trim() -replace '[^\w\-]', '_') } else { "Cust" }
-            $inc = if ($txtINC.Text.Trim()) { ($txtINC.Text.Trim() -replace '[^\w\-]', '') }       else { "INC" }
-            $file = Join-Path $env:USERPROFILE ("Desktop\P2PValidation_v80_${cust}_${inc}_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
-            $output.Text | Set-Content -Path $file -Encoding UTF8 -ErrorAction Stop
-            [System.Windows.Forms.MessageBox]::Show("Text Report Saved:`n$file", "Export Complete") | Out-Null
-        }
-        catch {
-            [System.Windows.Forms.MessageBox]::Show("Export Failed:`n$($_.Exception.Message)", "Error") | Out-Null
-        }
-    })
+    if ([string]::IsNullOrWhiteSpace($output.Text)) {
+        [System.Windows.Forms.MessageBox]::Show("There is no report to export.", "Nothing to Export") | Out-Null
+        return
+    }
+    try {
+        $cust = if ($txtCustomer.Text.Trim()) { ($txtCustomer.Text.Trim() -replace '[^\w\-]', '_') } else { "Cust" }
+        $inc  = if ($txtINC.Text.Trim())      { ($txtINC.Text.Trim() -replace '[^\w\-]', '') }       else { "INC" }
+        $file = Join-Path $env:USERPROFILE ("Desktop\P2PValidation_v80_${cust}_${inc}_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".txt")
+        $output.Text | Set-Content -Path $file -Encoding UTF8 -ErrorAction Stop
+        [System.Windows.Forms.MessageBox]::Show("Text Report Saved:`n$file", "Export Complete") | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Export Failed:`n$($_.Exception.Message)", "Error") | Out-Null
+    }
+})
 
 # ==========================================================
 # RUN VALIDATION ENGINE
@@ -626,428 +605,446 @@ $btnExportTxt.Add_Click({
 $script:LastReportData = $null
 
 $btnRun.Add_Click({
-        $output.Clear()
-        $OldServer = $txtOld.Text.Trim()
-        $NewServer = $txtNew.Text.Trim()
+    $output.Clear()
+    $OldServer = $txtOld.Text.Trim()
+    $NewServer = $txtNew.Text.Trim()
 
-        if (!$OldServer -or !$NewServer) {
-            [System.Windows.Forms.MessageBox]::Show("Enter both Reference (Private) and Public server names.", "Missing Details") | Out-Null
-            return
+    if (!$OldServer -or !$NewServer) {
+        [System.Windows.Forms.MessageBox]::Show("Enter both Reference (Private) and Public server names.", "Missing Details") | Out-Null
+        return
+    }
+
+    $btnRun.Enabled = $false
+    $statusPill.Text = "[ VALIDATING ]"
+    $statusPill.ForeColor = [System.Drawing.Color]::DeepSkyBlue
+    $statusText.Text = "Executing unified data collection across Reference and Public..."
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
+    $ValidationStart = Get-Date
+    $Report = New-Object 'System.Collections.Generic.List[string]'
+
+    try {
+        # BATCH 1: REFERENCE SERVER
+        $PrivData = Invoke-Command -ComputerName $OldServer -ErrorAction Stop -ScriptBlock $CollectorScriptBlock -ArgumentList "Reference"
+        if ($null -eq $PrivData) { throw "Reference server collection returned no data." }
+
+        # BATCH 2: PUBLIC SERVER
+        $PubData = Invoke-Command -ComputerName $NewServer -ErrorAction Stop -ScriptBlock $CollectorScriptBlock -ArgumentList "Public"
+        if ($null -eq $PubData) { throw "Public server collection returned no data." }
+
+        $m = $PubData.Metrics
+
+        # DYNAMIC PAIRING
+        $PairedApps = @()
+        $MatchedPubSvcs = @()
+
+        foreach ($pApp in $PrivData.Applications) {
+            $pKey = Get-NormalizedAppKey -ServiceName $pApp.ServiceName -RuntimeRoot $pApp.RuntimeRoot
+            $pubMatch = $PubData.Applications | Where-Object { 
+                (Get-NormalizedAppKey -ServiceName $_.ServiceName -RuntimeRoot $_.RuntimeRoot) -eq $pKey 
+            } | Select-Object -First 1
+
+            if ($pubMatch) { $MatchedPubSvcs += $pubMatch.ServiceName }
+            $PairedApps += [PSCustomObject]@{ Key = $pKey; PrivateApp = $pApp; PublicApp = $pubMatch }
         }
 
-        $btnRun.Enabled = $false
-        $statusPill.Text = "[ VALIDATING ]"
-        $statusPill.ForeColor = [System.Drawing.Color]::DeepSkyBlue
-        $statusText.Text = "Executing unified data collection across Reference and Public..."
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-
-        $ValidationStart = Get-Date
-        $Report = New-Object 'System.Collections.Generic.List[string]'
-
-        try {
-            # BATCH 1: REFERENCE SERVER
-            $PrivData = Invoke-Command -ComputerName $OldServer -ErrorAction Stop -ScriptBlock $CollectorScriptBlock -ArgumentList "Reference"
-            if ($null -eq $PrivData) { throw "Reference server collection returned no data." }
-
-            # BATCH 2: PUBLIC SERVER
-            $PubData = Invoke-Command -ComputerName $NewServer -ErrorAction Stop -ScriptBlock $CollectorScriptBlock -ArgumentList "Public"
-            if ($null -eq $PubData) { throw "Public server collection returned no data." }
-
-            $m = $PubData.Metrics
-
-            # DYNAMIC PAIRING
-            $PairedApps = @()
-            $MatchedPubSvcs = @()
-
-            foreach ($pApp in $PrivData.Applications) {
-                $pKey = Get-NormalizedAppKey -ServiceName $pApp.ServiceName -RuntimeRoot $pApp.RuntimeRoot
-                $pubMatch = $PubData.Applications | Where-Object { 
-                    (Get-NormalizedAppKey -ServiceName $_.ServiceName -RuntimeRoot $_.RuntimeRoot) -eq $pKey 
-                } | Select-Object -First 1
-
-                if ($pubMatch) { $MatchedPubSvcs += $pubMatch.ServiceName }
-                $PairedApps += [PSCustomObject]@{ Key = $pKey; PrivateApp = $pApp; PublicApp = $pubMatch }
-            }
-
-            foreach ($pubApp in $PubData.Applications) {
-                if ($pubApp.ServiceName -notin $MatchedPubSvcs) {
-                    $nKey = Get-NormalizedAppKey -ServiceName $pubApp.ServiceName -RuntimeRoot $pubApp.RuntimeRoot
-                    $PairedApps += [PSCustomObject]@{ Key = $nKey; PrivateApp = $null; PublicApp = $pubApp }
-                }
-            }
-
-            $matchedPairs = @($PairedApps | Where-Object { $null -ne $_.PrivateApp -and $null -ne $_.PublicApp })
-            $unmatchedCount = $PairedApps.Count - $matchedPairs.Count
-
-            $RiskItems = @()
-            $InfoItems = @()
-            $OnlyOnReference = @()
-            $OnlyOnPublic = @()
-            $ReferenceRequiredMissing = @()
-
-            # ==========================================================
-            # REPORT BUILDING
-            # ==========================================================
-            $Report.Add("====================================================================================")
-            $Report.Add("P2P MIGRATION VALIDATION REPORT v8.0                     [MODE: STRICTLY READ-ONLY]")
-            $Report.Add("====================================================================================")
-            $Report.Add(("Customer : {0,-24} INC     : {1}" -f $txtCustomer.Text, $txtINC.Text))
-            $Report.Add(("Reference: {0,-24} Public  : {1}" -f $OldServer, $NewServer))
-            $Report.Add(("Date     : {0,-24} Changes : 0 Files / 0 Services Modified" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')))
-
-            # 1. MRT DISCOVERY & RUNTIME MAPPING
-            Add-ReportSection -Report $Report -Title "1. MRT DISCOVERY & RUNTIME MAPPING"
-            $privRunningCount = $PrivData.Applications.Count
-            $pubRunningCount = $PubData.Applications.Count
-            $discoveryStat = if ($privRunningCount -gt 0 -and $pubRunningCount -gt 0 -and $unmatchedCount -eq 0) { "[PASS]" } elseif ($matchedPairs.Count -gt 0) { "[WARNING]" } else { "[FAIL]" }
-
-            $Report.Add(("Reference Running MRTs: {0,-5} | Public Running MRTs: {1,-5} | Matched: {2}  {3}" -f $privRunningCount, $pubRunningCount, $matchedPairs.Count, $discoveryStat))
-            $Report.Add(("-" * 84))
-
-            $mappingSectionOk = ($matchedPairs.Count -gt 0)
-            if ($PairedApps.Count -gt 0) {
-                foreach ($pair in $PairedApps) {
-                    $privSvc = if ($pair.PrivateApp) { $pair.PrivateApp.ServiceName } else { "None (Reference Missing)" }
-                    $privRoot = if ($pair.PrivateApp) { $pair.PrivateApp.RuntimeRoot } else { "N/A" }
-                    $pubSvc = if ($pair.PublicApp) { $pair.PublicApp.ServiceName }  else { "None (Public Missing)" }
-                    $pubRoot = if ($pair.PublicApp) { $pair.PublicApp.RuntimeRoot }  else { "N/A" }
-
-                    $isMatched = ($null -ne $pair.PrivateApp -and $null -ne $pair.PublicApp)
-                    $stat = if ($isMatched) { "[PASS]" } else { "[WARNING]" }
-                    if (-not $isMatched) { 
-                        $RiskItems += "Unmatched MRT: $($pair.Key) (Ref: $privSvc, Pub: $pubSvc)"
-                        if ($pair.PrivateApp -and -not $pair.PublicApp) {
-                            $OnlyOnReference += "MRT: $($pair.Key) ($privSvc)"
-                            $ReferenceRequiredMissing += "MRT: $($pair.Key)"
-                        }
-                        elseif (-not $pair.PrivateApp -and $pair.PublicApp) {
-                            $OnlyOnPublic += "MRT: $($pair.Key) ($pubSvc)"
-                        }
-                    }
-
-                    $Report.Add(("{0}  MRT Key: {1}" -f $stat, $pair.Key))
-                    $Report.Add(("  Reference : {0,-24} -> {1}" -f $privSvc, $privRoot))
-                    $Report.Add(("  Public    : {0,-24} -> {1}" -f $pubSvc, $pubRoot))
-                }
-            }
-            else {
-                $mappingSectionOk = $false
-                $Report.Add("[FAIL] No running mule_ee_* services discovered on Reference server.")
-            }
-
-            # 2. PUBLIC SERVICE CONFIGURATION & ACCOUNTS
-            Add-ReportSection -Report $Report -Title "2. PUBLIC SERVER SERVICE & ACCOUNT VALIDATION"
-            $Report.Add(("{0,-20} {1,-10} {2,-15} {3,-28} {4}" -f "Service", "State", "Start Mode", "Logon Account", "Status"))
-            $Report.Add(("-" * 84))
-            $svcSectionOk = $true
-            if ($PubData.Applications.Count -gt 0) {
-                foreach ($svc in $PubData.Applications) {
-                    $mode = if ($svc.StartMode -eq "Auto" -and $svc.DelayedAutoStart) { "Delayed Auto" } else { $svc.StartMode }
-                    $ok = ($svc.State -eq "Running" -and $mode -match "Auto" -and -not [string]::IsNullOrWhiteSpace($svc.StartName))
-                    if (-not $ok) { $svcSectionOk = $false }
-                    $stat = if ($ok) { "[PASS]" } else { "[FAIL]" }
-                    $Report.Add(("{0,-20} {1,-10} {2,-15} {3,-28} {4}" -f $svc.ServiceName, $svc.State, $mode, $svc.StartName, $stat))
-                }
-            }
-            else {
-                $svcSectionOk = $false
-                $Report.Add("[FAIL] No running mule_ee_* services found on public server.")
-            }
-
-            # 3. DIRECTORY, JCONN & TEMP STRUCTURE (REFERENCE-BASED)
-            Add-ReportSection -Report $Report -Title "3. DIRECTORY, JCONN & TEMP STRUCTURE (REFERENCE-BASED)"
-            $Report.Add(("{0,-32} {1,-42} {2}" -f "Component", "Validation Detail", "Status"))
-            $Report.Add(("-" * 84))
-            $folderSectionOk = $true
-
-            foreach ($folder in @("Java8", "JConn_CPS", "Jconn_Automation", "JDA", "_SW")) {
-                $pPath = if ($PrivData.FolderPaths) { $PrivData.FolderPaths[$folder] } else { $null }
-                $nPath = if ($PubData.FolderPaths) { $PubData.FolderPaths[$folder] }  else { $null }
-
-                if ($pPath -and $nPath) {
-                    $status = "[PASS]"
-                    $detail = "Present on Reference and Public"
-                }
-                elseif (-not $pPath -and -not $nPath) {
-                    $status = "[PASS]"
-                    $detail = "Not Present On Reference Server - Not Required"
-                }
-                elseif ($pPath -and -not $nPath) {
-                    $status = "[FAIL]"
-                    $detail = "Present On Reference But Missing On Public"
-                    $folderSectionOk = $false
-                    $RiskItems += "$folder missing on Public server"
-                    $OnlyOnReference += "Folder: $folder"
-                    $ReferenceRequiredMissing += "Folder: $folder"
-                }
-                else {
-                    $status = "[INFO]"
-                    $detail = "Additional Component Found Only On Public"
-                    $OnlyOnPublic += "Folder: $folder"
-                }
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Folder: $folder", $detail, $status))
-            }
-
-            # JConn_CPS Subfolders
-            $pCps = ($PrivData.CPSCount -gt 0)
-            $nCps = ($PubData.CPSCount -gt 0)
-            if ($pCps -and $nCps) {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated on Reference and Public", "[PASS]"))
-            }
-            elseif (-not $pCps -and -not $nCps) {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Not Present On Reference - Not Required", "[PASS]"))
-            }
-            elseif ($pCps -and -not $nCps) {
-                $folderSectionOk = $false
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated On Reference But Missing On Public", "[FAIL]"))
-                $RiskItems += "JConn_CPS populated on reference but empty on Public"
-                $OnlyOnReference += "Subfolders: JConn_CPS"
-                $ReferenceRequiredMissing += "Subfolders: JConn_CPS"
-            }
-            else {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated Only On Public", "[INFO]"))
-                $OnlyOnPublic += "Subfolders: JConn_CPS"
-            }
-
-            # Temp Root Directory
-            $pTempRoot = $PrivData.TempRoot
-            $nTempRoot = $PubData.TempRoot
-            if ($pTempRoot -and $nTempRoot) {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Present on Reference and Public", "[PASS]"))
-            }
-            elseif (-not $pTempRoot -and -not $nTempRoot) {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Not Present On Reference - Not Required", "[PASS]"))
-            }
-            elseif ($pTempRoot -and -not $nTempRoot) {
-                $folderSectionOk = $false
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Present On Reference But Missing On Public", "[FAIL]"))
-                $RiskItems += "Temp Root folder missing on Public server"
-                $OnlyOnReference += "Temp Root Directory"
-                $ReferenceRequiredMissing += "Temp Root Directory"
-            }
-            else {
-                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Found Only On Public", "[INFO]"))
-                $OnlyOnPublic += "Temp Root Directory"
-            }
-
-            # Normalized Temp Folders
-            foreach ($pair in $matchedPairs) {
-                $pT = $pair.PrivateApp.TempExists
-                $nT = $pair.PublicApp.TempExists
-                if ($pT -and $nT) {
-                    $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Present on Reference and Public", "[PASS]"))
-                }
-                elseif (-not $pT -and -not $nT) {
-                    $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Not Present On Reference - Not Required", "[PASS]"))
-                }
-                elseif ($pT -and -not $nT) {
-                    $folderSectionOk = $false
-                    $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Present On Reference But Missing On Public", "[FAIL]"))
-                    $RiskItems += "Service temp folder missing for $($pair.Key) on Public"
-                    $OnlyOnReference += "Temp: $($pair.Key)"
-                    $ReferenceRequiredMissing += "Temp: $($pair.Key)"
-                }
-                else {
-                    $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Found Only On Public", "[INFO]"))
-                    $OnlyOnPublic += "Temp: $($pair.Key)"
-                }
-            }
-
-            # 4. ENVIRONMENT VALIDATION
-            Add-ReportSection -Report $Report -Title "4. ENVIRONMENT VALIDATION"
-            $Report.Add(("Java Version : {0}" -f $m.JavaVer))
-            $Report.Add(("JAVA_HOME    : {0}  (Exe: {1})" -f $m.JavaHome, $m.JavaExe))
-            $resStat = if ($m.CPU -lt 90 -and $m.MemUsage -lt 90 -and $m.DiskFree -gt 10) { "[PASS]" } else { "[WARNING]" }
-            $Report.Add(("Resources    : CPU: {0}% | Mem: {1}% ({2} GB Free) | Disk ({3}): {4} GB Free  {5}" -f $m.CPU, $m.MemUsage, $m.FreeMem, $m.DriveName, $m.DiskFree, $resStat))
-        
-            $pAmq = ($PrivData.AmqFolders.Count -gt 0)
-            $nAmq = ($PubData.AmqFolders.Count -gt 0)
-            $amqOk = $true
-            if ($pAmq -and $nAmq) {
-                $Report.Add(("ActiveMQ     : Present on Reference and Public ({0})  [PASS]" -f ($PubData.AmqFolders -join ', ')))
-            }
-            elseif (-not $pAmq -and -not $nAmq) {
-                $Report.Add("ActiveMQ     : Not Present on Reference Server - Not Required  [PASS]")
-            }
-            elseif ($pAmq -and -not $nAmq) {
-                $Report.Add("ActiveMQ     : Present on Reference But Missing on Public  [FAIL]")
-                $RiskItems += "ActiveMQ present on Reference server but missing on Public"
-                $OnlyOnReference += "ActiveMQ"
-                $ReferenceRequiredMissing += "ActiveMQ"
-                $amqOk = $false
-            }
-            else {
-                $Report.Add(("ActiveMQ     : Present Only on Public ({0})  [INFO]" -f ($PubData.AmqFolders -join ', ')))
-                $OnlyOnPublic += "ActiveMQ"
-            }
-
-            if ($m.AmqReachable) {
-                $Report.Add(("AMQ Console  : Reachable on Port {0} ({1})  [PASS]" -f $m.AmqPortFound, $m.AmqUrlFound))
-            }
-            else {
-                $Report.Add("AMQ Console  : Not Reachable  [INFO]")
-            }
-
-            # 5. DYNAMIC WRAPPER CONFIGURATION TABLES
-            $wrapperSectionOk = ($matchedPairs.Count -gt 0)
-            $idx = 1
-            foreach ($pair in $matchedPairs) {
-                $wOk = Add-WrapperTable -Report $Report -Title "5.$idx WRAPPER CONFIGURATION : $($pair.Key) ($($pair.PublicApp.ServiceName))" -PrivContent $pair.PrivateApp.WrapperLines -PubContent $pair.PublicApp.WrapperLines
-                if (-not $wOk) { 
-                    $wrapperSectionOk = $false
-                    $RiskItems += "Wrapper configuration mismatch on $($pair.Key)"
-                }
-                $idx++
-            }
-
-            # 6. ACTIONABLE LOG FINDINGS
-            Add-ReportSection -Report $Report -Title "6. ACTIONABLE LOG FINDINGS"
-            $actionableLogs = @($m.LogResults | Where-Object { $_.Errors -gt 0 -or $_.Exceptions -gt 0 -or $_.Fatals -gt 0 })
-            if ($actionableLogs.Count -gt 0) {
-                $Report.Add(("{0,-20} {1,-30} {2,-8} {3,-8} {4,-12} {5}" -f "Application", "Log File", "Errors", "Fatals", "Exceptions", "Status"))
-                $Report.Add(("-" * 84))
-                foreach ($lr in $actionableLogs) {
-                    $Report.Add(("{0,-20} {1,-30} {2,-8} {3,-8} {4,-12} {5}" -f $lr.AppFolder, $lr.LogName, $lr.Errors, $lr.Fatals, $lr.Exceptions, "[WARNING]"))
-                }
-            }
-            else {
-                $Report.Add("[PASS] All scanned application log files are clean (0 Errors, 0 Fatals, 0 Exceptions).")
-            }
-
-            # 7. CRITICAL ERROR ANALYSIS
-            Add-ReportSection -Report $Report -Title "7. CRITICAL ERROR ANALYSIS"
-            $totalCritical = 0
-            if ($m.CriticalList) {
-                foreach ($item in $m.CriticalList) {
-                    $totalCritical += $item.Count
-                    $stat = if ($item.Count -gt 0) { "[WARNING]" } else { "[PASS]" }
-                    $Report.Add(("{0,-26} Count: {1,-5} {2}" -f $item.Pattern, $item.Count, $stat))
-                    if ($item.Count -gt 0) {
-                        if (-not [string]::IsNullOrWhiteSpace($item.LogFile)) { $Report.Add(("  Found In : {0}" -f $item.LogFile)) }
-                        if (-not [string]::IsNullOrWhiteSpace($item.Sample)) { $Report.Add(("  Sample   : {0}" -f $item.Sample)) }
-                    }
-                }
-            }
-            if ($totalCritical -gt 0) {
-                $RiskItems += "$totalCritical critical log signatures detected"
-            }
-
-            # 8. REFERENCE DIFFERENCES
-            Add-ReportSection -Report $Report -Title "8. REFERENCE DIFFERENCES"
-            $Report.Add("Only On Reference:")
-            if ($OnlyOnReference.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $OnlyOnReference) { $Report.Add("  - $item") } }
-
-            $Report.Add("")
-            $Report.Add("Only On Public:")
-            if ($OnlyOnPublic.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $OnlyOnPublic) { $Report.Add("  - $item") } }
-
-            $Report.Add("")
-            $Report.Add("Reference-Required Missing On Public:")
-            if ($ReferenceRequiredMissing.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $ReferenceRequiredMissing) { $Report.Add("  - $item") } }
-
-            # 9. CUTOVER RISK SUMMARY
-            Add-ReportSection -Report $Report -Title "9. CUTOVER RISK SUMMARY"
-            $FailCount = @($Report | Where-Object { $_ -match "\[FAIL\]" }).Count
-        
-            $riskLevel = "LOW"
-            if ($FailCount -ge 4) { $riskLevel = "HIGH" }
-            elseif ($FailCount -gt 0 -or $totalCritical -gt 0) { $riskLevel = "MEDIUM" }
-            elseif ($RiskItems.Count -gt 0) { $riskLevel = "LOW (WITH WARNINGS)" }
-
-            $Report.Add("HIGH RISK FINDINGS")
-            $Report.Add("------------------")
-            if ($RiskItems.Count -eq 0) { $Report.Add("None detected.") } else { foreach ($ri in $RiskItems) { $Report.Add(" - $ri") } }
-
-            $Report.Add("")
-            $Report.Add("OVERALL RISK LEVEL")
-            $Report.Add("------------------")
-            $Report.Add($riskLevel)
-
-            # 10. MIGRATION SUMMARY
-            Add-ReportSection -Report $Report -Title "10. MIGRATION SUMMARY"
-            $Report.Add(("Reference Running MRTs : {0}" -f $PrivData.Applications.Count))
-            $Report.Add(("Public Running MRTs    : {0}" -f $PubData.Applications.Count))
-            $Report.Add(("Matched MRTs           : {0}" -f $matchedPairs.Count))
-            $Report.Add(("Wrapper Matches        : {0}/{1}" -f $matchedPairs.Count, $matchedPairs.Count))
-            $Report.Add(("Service Matches        : {0}/{1}" -f $PubData.Applications.Count, $PubData.Applications.Count))
-            $Report.Add(("Critical Errors Found  : {0}" -f $totalCritical))
-            $Report.Add(("Reference Differences  : {0}" -f ($OnlyOnReference.Count + $OnlyOnPublic.Count)))
-
-            # 11. CUTOVER DECISION MATRIX
-            Add-ReportSection -Report $Report -Title "11. CUTOVER DECISION MATRIX"
-            $Report.Add(("{0,-26} : {1}" -f "MRT Discovery", $(if ($mappingSectionOk) { "PASS" } else { "FAIL" })))
-            $Report.Add(("{0,-26} : {1}" -f "Public Services", $(if ($svcSectionOk) { "PASS" } else { "FAIL" })))
-            $Report.Add(("{0,-26} : {1}" -f "Folders & Temp", $(if ($folderSectionOk) { "PASS" } else { "FAIL" })))
-            $Report.Add(("{0,-26} : {1}" -f "Environment & Java", $(if ($resStat -match "PASS" -and $amqOk) { "PASS" } else { "WARNING" })))
-            $Report.Add(("{0,-26} : {1}" -f "Wrapper Configuration", $(if ($wrapperSectionOk) { "PASS" } else { "FAIL" })))
-            $Report.Add(("{0,-26} : {1}" -f "Critical Log Signatures", $(if ($totalCritical -eq 0) { "PASS" } else { "WARNING" })))
-        
-            $recommendation = if ($FailCount -eq 0 -and $RiskItems.Count -eq 0) {
-                "READY FOR CUTOVER"
-            }
-            elseif ($FailCount -eq 0) {
-                "READY FOR CUTOVER WITH WARNINGS"
-            }
-            else {
-                "REVIEW REQUIRED BEFORE CUTOVER"
-            }
-
-            $Report.Add("")
-            $Report.Add("Decision")
-            $Report.Add("--------")
-            $Report.Add($recommendation)
-
-            # 12. FINAL SIGN-OFF
-            $Duration = [math]::Round(((Get-Date) - $ValidationStart).TotalSeconds, 2)
-            $Report.Add("")
-            $Report.Add("====================================================================================")
-            $Report.Add(("MIGRATION READINESS SIGN-OFF                             [DURATION: {0} SECONDS]" -f $Duration))
-            $Report.Add("====================================================================================")
-            $Report.Add(("  {0} Dynamic MRT Discovery & Mapping" -f $(if ($mappingSectionOk) { "[OK]" } else { "[FAIL]" })))
-            $Report.Add(("  {0} Public Services & Logon Accounts" -f $(if ($svcSectionOk) { "[OK]" } else { "[FAIL]" })))
-            $Report.Add(("  {0} Directory, JConn & Temp Structure (Reference-Based)" -f $(if ($folderSectionOk) { "[OK]" } else { "[FAIL]" })))
-            $Report.Add(("  {0} Environment & Java Validation" -f $(if ($resStat -match "PASS" -and $amqOk) { "[OK]" } else { "[WARNING]" })))
-            $Report.Add(("  {0} Wrapper Memory & JMX Configuration" -f $(if ($wrapperSectionOk) { "[OK]" } else { "[FAIL]" })))
-            $Report.Add(("  {0} Critical Log Signatures ({1} Detected)" -f $(if ($totalCritical -eq 0) { "[OK]" } else { "[WARNING]" }), $totalCritical))
-            $Report.Add("")
-            $Report.Add(("FINAL RESULT : {0} ({1} Failures Detected)" -f $recommendation, $FailCount))
-            $Report.Add("====================================================================================")
-
-            $output.Text = $Report -join [Environment]::NewLine
-            $statusPill.Text = "[ COMPLETED ]"
-            $statusPill.ForeColor = if ($FailCount -eq 0) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::IndianRed }
-            $statusText.Text = "Validation finished in $Duration seconds"
-
-            $script:LastReportData = @{
-                Customer                 = $txtCustomer.Text
-                INC                      = $txtINC.Text
-                ReferenceServer          = $OldServer
-                PublicServer             = $NewServer
-                Duration                 = $Duration
-                Timestamp                = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-                MatchedPairs             = $matchedPairs
-                PrivData                 = $PrivData
-                PubData                  = $PubData
-                Metrics                  = $m
-                FailCount                = $FailCount
-                TotalCritical            = $totalCritical
-                RiskLevel                = $riskLevel
-                Recommendation           = $recommendation
-                RiskItems                = $RiskItems
-                OnlyOnReference          = $OnlyOnReference
-                OnlyOnPublic             = $OnlyOnPublic
-                ReferenceRequiredMissing = $ReferenceRequiredMissing
-                ActionableLogs           = $actionableLogs
-                MappingOk                = $mappingSectionOk
-                SvcOk                    = $svcSectionOk
-                FolderOk                 = $folderSectionOk
-                EnvOk                    = ($resStat -match "PASS" -and $amqOk)
-                WrapperOk                = $wrapperSectionOk
-                FullReportText           = $output.Text
+        foreach ($pubApp in $PubData.Applications) {
+            if ($pubApp.ServiceName -notin $MatchedPubSvcs) {
+                $nKey = Get-NormalizedAppKey -ServiceName $pubApp.ServiceName -RuntimeRoot $pubApp.RuntimeRoot
+                $PairedApps += [PSCustomObject]@{ Key = $nKey; PrivateApp = $null; PublicApp = $pubApp }
             }
         }
-        catch {
-            $output.Text = @"
+
+        $matchedPairs   = @($PairedApps | Where-Object { $null -ne $_.PrivateApp -and $null -ne $_.PublicApp })
+        $unmatchedCount = $PairedApps.Count - $matchedPairs.Count
+
+        $RiskItems                = @()
+        $InfoItems                = @()
+        $OnlyOnReference          = @()
+        $OnlyOnPublic             = @()
+        $ReferenceRequiredMissing = @()
+
+        # AMQ Plain URL Strings generated in main engine (No HTML, no anchor tags)
+        $AmqUrls = @(
+            "http://$NewServer`:11080/index.html",
+            "http://$NewServer`:31080/index.html",
+            "http://$NewServer`:51080/index.html"
+        )
+
+        # ==========================================================
+        # REPORT BUILDING
+        # ==========================================================
+        $Report.Add("====================================================================================")
+        $Report.Add("P2P MIGRATION VALIDATION REPORT v8.0                     [MODE: STRICTLY READ-ONLY]")
+        $Report.Add("====================================================================================")
+        $incDisplay = if ($txtINC.Text.Trim()) { $txtINC.Text.Trim() } else { "N/A" }
+        $Report.Add(("Customer : {0,-24} INC     : {1}" -f $txtCustomer.Text, $incDisplay))
+        $Report.Add(("Reference: {0,-24} Public  : {1}" -f $OldServer, $NewServer))
+        $Report.Add(("Date     : {0,-24} Changes : 0 Files / 0 Services Modified" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')))
+
+        # 1. MRT DISCOVERY & RUNTIME MAPPING
+        Add-ReportSection -Report $Report -Title "1. MRT DISCOVERY & RUNTIME MAPPING"
+        $privRunningCount = $PrivData.Applications.Count
+        $pubRunningCount  = $PubData.Applications.Count
+        $discoveryStat    = if ($privRunningCount -gt 0 -and $pubRunningCount -gt 0 -and $unmatchedCount -eq 0) { "[PASS]" } elseif ($matchedPairs.Count -gt 0) { "[WARNING]" } else { "[FAIL]" }
+
+        $Report.Add(("Reference Running MRTs: {0,-5} | Public Running MRTs: {1,-5} | Matched: {2}  {3}" -f $privRunningCount, $pubRunningCount, $matchedPairs.Count, $discoveryStat))
+        $Report.Add(("-" * 84))
+
+        $mappingSectionOk = ($matchedPairs.Count -gt 0)
+        if ($PairedApps.Count -gt 0) {
+            foreach ($pair in $PairedApps) {
+                $privSvc  = if ($pair.PrivateApp) { $pair.PrivateApp.ServiceName } else { "None (Reference Missing)" }
+                $privRoot = if ($pair.PrivateApp) { $pair.PrivateApp.RuntimeRoot } else { "N/A" }
+                $pubSvc   = if ($pair.PublicApp)  { $pair.PublicApp.ServiceName }  else { "None (Public Missing)" }
+                $pubRoot  = if ($pair.PublicApp)  { $pair.PublicApp.RuntimeRoot }  else { "N/A" }
+
+                $isMatched = ($null -ne $pair.PrivateApp -and $null -ne $pair.PublicApp)
+                $stat = if ($isMatched) { "[PASS]" } else { "[WARNING]" }
+                if (-not $isMatched) { 
+                    $RiskItems += "Unmatched MRT: $($pair.Key) (Ref: $privSvc, Pub: $pubSvc)"
+                    if ($pair.PrivateApp -and -not $pair.PublicApp) {
+                        $OnlyOnReference += "MRT: $($pair.Key) ($privSvc)"
+                        $ReferenceRequiredMissing += "MRT: $($pair.Key)"
+                    } elseif (-not $pair.PrivateApp -and $pair.PublicApp) {
+                        $OnlyOnPublic += "MRT: $($pair.Key) ($pubSvc)"
+                    }
+                }
+
+                $Report.Add(("{0}  MRT Key: {1}" -f $stat, $pair.Key))
+                $Report.Add(("  Reference : {0,-24} -> {1}" -f $privSvc, $privRoot))
+                $Report.Add(("  Public    : {0,-24} -> {1}" -f $pubSvc, $pubRoot))
+            }
+        } else {
+            $mappingSectionOk = $false
+            $Report.Add("[FAIL] No running mule_ee_* services discovered on Reference server.")
+        }
+
+        # 2. PUBLIC SERVICE CONFIGURATION & ACCOUNTS
+        Add-ReportSection -Report $Report -Title "2. PUBLIC SERVER SERVICE & ACCOUNT VALIDATION"
+        $Report.Add(("{0,-20} {1,-10} {2,-15} {3,-28} {4}" -f "Service", "State", "Start Mode", "Logon Account", "Status"))
+        $Report.Add(("-" * 84))
+        $svcSectionOk = $true
+        if ($PubData.Applications.Count -gt 0) {
+            foreach ($svc in $PubData.Applications) {
+                $mode = if ($svc.StartMode -eq "Auto" -and $svc.DelayedAutoStart) { "Delayed Auto" } else { $svc.StartMode }
+                $ok   = ($svc.State -eq "Running" -and $mode -match "Auto" -and -not [string]::IsNullOrWhiteSpace($svc.StartName))
+                if (-not $ok) { $svcSectionOk = $false }
+                $stat = if ($ok) { "[PASS]" } else { "[FAIL]" }
+                $Report.Add(("{0,-20} {1,-10} {2,-15} {3,-28} {4}" -f $svc.ServiceName, $svc.State, $mode, $svc.StartName, $stat))
+            }
+        } else {
+            $svcSectionOk = $false
+            $Report.Add("[FAIL] No running mule_ee_* services found on public server.")
+        }
+
+        # 3. DIRECTORY, JCONN & TEMP STRUCTURE (REFERENCE-BASED)
+        Add-ReportSection -Report $Report -Title "3. DIRECTORY, JCONN & TEMP STRUCTURE (REFERENCE-BASED)"
+        $Report.Add(("{0,-32} {1,-42} {2}" -f "Component", "Validation Detail", "Status"))
+        $Report.Add(("-" * 84))
+        $folderSectionOk = $true
+
+        foreach ($folder in @("Java8", "JConn_CPS", "Jconn_Automation", "JDA", "_SW")) {
+            $pPath = if ($PrivData.FolderPaths) { $PrivData.FolderPaths[$folder] } else { $null }
+            $nPath = if ($PubData.FolderPaths)  { $PubData.FolderPaths[$folder] }  else { $null }
+
+            if ($pPath -and $nPath) {
+                $status = "[PASS]"
+                $detail = "Present on Reference and Public"
+            } elseif (-not $pPath -and -not $nPath) {
+                $status = "[PASS]"
+                $detail = "Not Present On Reference Server - Not Required"
+            } elseif ($pPath -and -not $nPath) {
+                $status = "[FAIL]"
+                $detail = "Present On Reference But Missing On Public"
+                $folderSectionOk = $false
+                $RiskItems += "$folder missing on Public server"
+                $OnlyOnReference += "Folder: $folder"
+                $ReferenceRequiredMissing += "Folder: $folder"
+            } else {
+                $status = "[INFO]"
+                $detail = "Additional Component Found Only On Public"
+                $OnlyOnPublic += "Folder: $folder"
+            }
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Folder: $folder", $detail, $status))
+        }
+
+        # JConn_CPS Subfolders
+        $pCps = ($PrivData.CPSCount -gt 0)
+        $nCps = ($PubData.CPSCount -gt 0)
+        if ($pCps -and $nCps) {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated on Reference and Public", "[PASS]"))
+        } elseif (-not $pCps -and -not $nCps) {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Not Present On Reference - Not Required", "[PASS]"))
+        } elseif ($pCps -and -not $nCps) {
+            $folderSectionOk = $false
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated On Reference But Missing On Public", "[FAIL]"))
+            $RiskItems += "JConn_CPS populated on reference but empty on Public"
+            $OnlyOnReference += "Subfolders: JConn_CPS"
+            $ReferenceRequiredMissing += "Subfolders: JConn_CPS"
+        } else {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Subfolders: JConn_CPS", "Populated Only On Public", "[INFO]"))
+            $OnlyOnPublic += "Subfolders: JConn_CPS"
+        }
+
+        # Temp Root Directory
+        $pTempRoot = $PrivData.TempRoot
+        $nTempRoot = $PubData.TempRoot
+        if ($pTempRoot -and $nTempRoot) {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Present on Reference and Public", "[PASS]"))
+        } elseif (-not $pTempRoot -and -not $nTempRoot) {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Not Present On Reference - Not Required", "[PASS]"))
+        } elseif ($pTempRoot -and -not $nTempRoot) {
+            $folderSectionOk = $false
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Present On Reference But Missing On Public", "[FAIL]"))
+            $RiskItems += "Temp Root folder missing on Public server"
+            $OnlyOnReference += "Temp Root Directory"
+            $ReferenceRequiredMissing += "Temp Root Directory"
+        } else {
+            $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp Root: Base Directory", "Found Only On Public", "[INFO]"))
+            $OnlyOnPublic += "Temp Root Directory"
+        }
+
+        # Normalized Temp Folders
+        foreach ($pair in $matchedPairs) {
+            $pT = $pair.PrivateApp.TempExists
+            $nT = $pair.PublicApp.TempExists
+            if ($pT -and $nT) {
+                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Present on Reference and Public", "[PASS]"))
+            } elseif (-not $pT -and -not $nT) {
+                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Not Present On Reference - Not Required", "[PASS]"))
+            } elseif ($pT -and -not $nT) {
+                $folderSectionOk = $false
+                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Present On Reference But Missing On Public", "[FAIL]"))
+                $RiskItems += "Service temp folder missing for $($pair.Key) on Public"
+                $OnlyOnReference += "Temp: $($pair.Key)"
+                $ReferenceRequiredMissing += "Temp: $($pair.Key)"
+            } else {
+                $Report.Add(("{0,-32} {1,-42} {2}" -f "Temp: $($pair.Key)", "Found Only On Public", "[INFO]"))
+                $OnlyOnPublic += "Temp: $($pair.Key)"
+            }
+        }
+
+        # 4. ENVIRONMENT VALIDATION
+        Add-ReportSection -Report $Report -Title "4. ENVIRONMENT VALIDATION"
+        $Report.Add(("Java Version : {0}" -f $m.JavaVer))
+        $Report.Add(("JAVA_HOME    : {0}  (Exe: {1})" -f $m.JavaHome, $m.JavaExe))
+        $resStat = if ($m.CPU -lt 90 -and $m.MemUsage -lt 90 -and $m.DiskFree -gt 10) { "[PASS]" } else { "[WARNING]" }
+        $Report.Add(("Resources    : CPU: {0}% | Mem: {1}% ({2} GB Free) | Disk ({3}): {4} GB Free  {5}" -f $m.CPU, $m.MemUsage, $m.FreeMem, $m.DriveName, $m.DiskFree, $resStat))
+        
+        $pAmq = ($PrivData.AmqFolders.Count -gt 0)
+        $nAmq = ($PubData.AmqFolders.Count -gt 0)
+        $amqOk = $true
+        if ($pAmq -and $nAmq) {
+            $Report.Add(("ActiveMQ     : Present on Reference and Public ({0})  [PASS]" -f ($PubData.AmqFolders -join ', ')))
+        } elseif (-not $pAmq -and -not $nAmq) {
+            $Report.Add("ActiveMQ     : Not Present on Reference Server - Not Required  [PASS]")
+        } elseif ($pAmq -and -not $nAmq) {
+            $Report.Add("ActiveMQ     : Present on Reference But Missing on Public  [FAIL]")
+            $RiskItems += "ActiveMQ present on Reference server but missing on Public"
+            $OnlyOnReference += "ActiveMQ"
+            $ReferenceRequiredMissing += "ActiveMQ"
+            $amqOk = $false
+        } else {
+            $Report.Add(("ActiveMQ     : Present Only on Public ({0})  [INFO]" -f ($PubData.AmqFolders -join ', ')))
+            $OnlyOnPublic += "ActiveMQ"
+        }
+
+        # AMQ Listener Ports, Status & Console URLs
+        if ($PubData.AmqFolders.Count -gt 0) {
+            if ($PubData.AmqListeningPorts.Count -gt 0) {
+                $Report.Add("")
+                $Report.Add(
+                    ("AMQ Listener Ports : {0}" -f ($PubData.AmqListeningPorts -join ", "))
+                )
+                $Report.Add(
+                    "AMQ Status         : LISTENING [PASS]"
+                )
+            }
+
+            $Report.Add("")
+            $Report.Add("AMQ Console URLs :")
+            foreach ($u in $AmqUrls) {
+                $Report.Add("  $u")
+            }
+            $Report.Add(
+                "AMQ Validation   : Manual Browser Verification"
+            )
+        }
+
+        # 5. DYNAMIC WRAPPER CONFIGURATION TABLES
+        $wrapperSectionOk = ($matchedPairs.Count -gt 0)
+        $idx = 1
+        $wrapPassCount = 0
+        foreach ($pair in $matchedPairs) {
+            $wOk = Add-WrapperTable -Report $Report -Title "5.$idx WRAPPER CONFIGURATION : $($pair.Key) ($($pair.PublicApp.ServiceName))" -PrivContent $pair.PrivateApp.WrapperLines -PubContent $pair.PublicApp.WrapperLines
+            if ($wOk) {
+                $wrapPassCount++
+            } else { 
+                $wrapperSectionOk = $false
+                $RiskItems += "Wrapper configuration mismatch on $($pair.Key)"
+            }
+            $idx++
+        }
+
+        # 6. ACTIONABLE LOG FINDINGS
+        Add-ReportSection -Report $Report -Title "6. ACTIONABLE LOG FINDINGS"
+        $actionableLogs = @($m.LogResults | Where-Object { $_.Errors -gt 0 -or $_.Exceptions -gt 0 -or $_.Fatals -gt 0 })
+        if ($actionableLogs.Count -gt 0) {
+            $Report.Add(("{0,-20} {1,-30} {2,-8} {3,-8} {4,-12} {5}" -f "Application", "Log File", "Errors", "Fatals", "Exceptions", "Status"))
+            $Report.Add(("-" * 84))
+            foreach ($lr in $actionableLogs) {
+                $Report.Add(("{0,-20} {1,-30} {2,-8} {3,-8} {4,-12} {5}" -f $lr.AppFolder, $lr.LogName, $lr.Errors, $lr.Fatals, $lr.Exceptions, "[WARNING]"))
+            }
+        } else {
+            $Report.Add("[PASS] All scanned application log files are clean (0 Errors, 0 Fatals, 0 Exceptions).")
+        }
+
+        # 7. CRITICAL ERROR ANALYSIS
+        Add-ReportSection -Report $Report -Title "7. CRITICAL ERROR ANALYSIS"
+        $totalCritical = 0
+        if ($m.CriticalList) {
+            foreach ($item in $m.CriticalList) {
+                $totalCritical += $item.Count
+                $stat = if ($item.Count -gt 0) { "[WARNING]" } else { "[PASS]" }
+                $Report.Add(("{0,-26} Count: {1,-5} {2}" -f $item.Pattern, $item.Count, $stat))
+                if ($item.Count -gt 0) {
+                    if (-not [string]::IsNullOrWhiteSpace($item.LogFile)) { $Report.Add(("  Found In : {0}" -f $item.LogFile)) }
+                    if (-not [string]::IsNullOrWhiteSpace($item.Sample))  { $Report.Add(("  Sample   : {0}" -f $item.Sample)) }
+                }
+            }
+        }
+        if ($totalCritical -gt 0) {
+            $RiskItems += "$totalCritical critical log signatures detected"
+        }
+
+        # 8. REFERENCE DIFFERENCES
+        Add-ReportSection -Report $Report -Title "8. REFERENCE DIFFERENCES"
+        $Report.Add("Only On Reference:")
+        if ($OnlyOnReference.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $OnlyOnReference) { $Report.Add("  - $item") } }
+
+        $Report.Add("")
+        $Report.Add("Only On Public:")
+        if ($OnlyOnPublic.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $OnlyOnPublic) { $Report.Add("  - $item") } }
+
+        $Report.Add("")
+        $Report.Add("Reference-Required Missing On Public:")
+        if ($ReferenceRequiredMissing.Count -eq 0) { $Report.Add("  None") } else { foreach ($item in $ReferenceRequiredMissing) { $Report.Add("  - $item") } }
+
+        # 9. CUTOVER RISK SUMMARY
+        Add-ReportSection -Report $Report -Title "9. CUTOVER RISK SUMMARY"
+        $FailCount = @($Report | Where-Object { $_ -match "\[FAIL\]" }).Count
+        
+        $riskLevel = "LOW"
+        if ($FailCount -ge 4) { $riskLevel = "HIGH" }
+        elseif ($FailCount -gt 0 -or $totalCritical -gt 0) { $riskLevel = "MEDIUM" }
+        elseif ($RiskItems.Count -gt 0) { $riskLevel = "LOW (WITH WARNINGS)" }
+
+        $Report.Add("HIGH RISK FINDINGS")
+        $Report.Add("------------------")
+        if ($RiskItems.Count -eq 0) { $Report.Add("None detected.") } else { foreach ($ri in $RiskItems) { $Report.Add(" - $ri") } }
+
+        $Report.Add("")
+        $Report.Add("OVERALL RISK LEVEL")
+        $Report.Add("------------------")
+        $Report.Add($riskLevel)
+
+        # Log Warnings Summary
+        $appWarningCount = (
+            $actionableLogs |
+            Select-Object AppFolder -Unique
+        ).Count
+
+        $Report.Add(
+            ("Applications With Log Warnings : {0}" -f $appWarningCount)
+        )
+
+        # 10. MIGRATION SUMMARY
+        Add-ReportSection -Report $Report -Title "10. MIGRATION SUMMARY"
+        $Report.Add(("Reference Running MRTs : {0}" -f $PrivData.Applications.Count))
+        $Report.Add(("Public Running MRTs    : {0}" -f $PubData.Applications.Count))
+        $Report.Add(("Matched MRTs           : {0}" -f $matchedPairs.Count))
+        $Report.Add(("Wrapper Matches        : {0}/{1}" -f $wrapPassCount, $matchedPairs.Count))
+        $Report.Add("Wrapper Custom Properties Checked : 4 (Oracle JDBC, Gatekeeper, Base URI, JavaTmpDir)")
+        $Report.Add(("Service Matches        : {0}/{1}" -f $PubData.Applications.Count, $PubData.Applications.Count))
+        $Report.Add(("Critical Errors Found  : {0}" -f $totalCritical))
+        $Report.Add(("Reference Differences  : {0}" -f ($OnlyOnReference.Count + $OnlyOnPublic.Count)))
+
+        # 11. CUTOVER DECISION MATRIX
+        Add-ReportSection -Report $Report -Title "11. CUTOVER DECISION MATRIX"
+        $Report.Add(("{0,-26} : {1}" -f "MRT Discovery", $(if ($mappingSectionOk) { "PASS" } else { "FAIL" })))
+        $Report.Add(("{0,-26} : {1}" -f "Public Services", $(if ($svcSectionOk) { "PASS" } else { "FAIL" })))
+        $Report.Add(("{0,-26} : {1}" -f "Folders & Temp", $(if ($folderSectionOk) { "PASS" } else { "FAIL" })))
+        $Report.Add(("{0,-26} : {1}" -f "Environment & Java", $(if ($resStat -match "PASS" -and $amqOk) { "PASS" } else { "WARNING" })))
+        $Report.Add(("{0,-26} : {1}" -f "Wrapper Configuration", $(if ($wrapperSectionOk) { "PASS" } else { "FAIL" })))
+        $Report.Add(("{0,-26} : {1}" -f "Critical Log Signatures", $(if ($totalCritical -eq 0) { "PASS" } else { "WARNING" })))
+        
+        $recommendation = if ($FailCount -eq 0 -and $RiskItems.Count -eq 0) {
+            "READY FOR CUTOVER"
+        } elseif ($FailCount -eq 0) {
+            "READY FOR CUTOVER WITH WARNINGS"
+        } else {
+            "REVIEW REQUIRED BEFORE CUTOVER"
+        }
+
+        $Report.Add("")
+        $Report.Add("Decision")
+        $Report.Add("--------")
+        $Report.Add($recommendation)
+
+        # 12. FINAL SIGN-OFF
+        $Duration = [math]::Round(((Get-Date) - $ValidationStart).TotalSeconds, 2)
+        $Report.Add("")
+        $Report.Add("====================================================================================")
+        $Report.Add(("MIGRATION READINESS SIGN-OFF                             [DURATION: {0} SECONDS]" -f $Duration))
+        $Report.Add("====================================================================================")
+        $Report.Add(("  {0} Dynamic MRT Discovery & Mapping" -f $(if ($mappingSectionOk) { "[OK]" } else { "[FAIL]" })))
+        $Report.Add(("  {0} Public Services & Logon Accounts" -f $(if ($svcSectionOk) { "[OK]" } else { "[FAIL]" })))
+        $Report.Add(("  {0} Directory, JConn & Temp Structure (Reference-Based)" -f $(if ($folderSectionOk) { "[OK]" } else { "[FAIL]" })))
+        $Report.Add(("  {0} Environment & Java Validation" -f $(if ($resStat -match "PASS" -and $amqOk) { "[OK]" } else { "[WARNING]" })))
+        $Report.Add(("  {0} Wrapper Memory & JMX Configuration" -f $(if ($wrapperSectionOk) { "[OK]" } else { "[FAIL]" })))
+        $Report.Add(("  {0} Critical Log Signatures ({1} Detected)" -f $(if ($totalCritical -eq 0) { "[OK]" } else { "[WARNING]" }), $totalCritical))
+        $Report.Add("")
+        $Report.Add(("FINAL RESULT : {0} ({1} Failures Detected)" -f $recommendation, $FailCount))
+        $Report.Add("====================================================================================")
+
+        $output.Text = $Report -join [Environment]::NewLine
+        $statusPill.Text = "[ COMPLETED ]"
+        $statusPill.ForeColor = if ($FailCount -eq 0) { [System.Drawing.Color]::LimeGreen } else { [System.Drawing.Color]::IndianRed }
+        $statusText.Text = "Validation finished in $Duration seconds"
+
+        $script:LastReportData = @{
+            Customer                 = $txtCustomer.Text
+            INC                      = $txtINC.Text
+            ReferenceServer          = $OldServer
+            PublicServer             = $NewServer
+            Duration                 = $Duration
+            Timestamp                = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+            MatchedPairs             = $matchedPairs
+            PrivData                 = $PrivData
+            PubData                  = $PubData
+            Metrics                  = $m
+            FailCount                = $FailCount
+            TotalCritical            = $totalCritical
+            RiskLevel                = $riskLevel
+            Recommendation           = $recommendation
+            RiskItems                = $RiskItems
+            OnlyOnReference          = $OnlyOnReference
+            OnlyOnPublic             = $OnlyOnPublic
+            ReferenceRequiredMissing = $ReferenceRequiredMissing
+            ActionableLogs           = $actionableLogs
+            MappingOk                = $mappingSectionOk
+            SvcOk                    = $svcSectionOk
+            FolderOk                 = $folderSectionOk
+            EnvOk                    = ($resStat -match "PASS" -and $amqOk)
+            WrapperOk                = $wrapperSectionOk
+            WrapperPassCount         = $wrapPassCount
+            WrapperTotalCount        = $matchedPairs.Count
+            AmqUrls                  = $AmqUrls
+            FullReportText           = $output.Text
+        }
+    } catch {
+        $output.Text = @"
 VALIDATION FAILED
 
 MESSAGE:
@@ -1059,120 +1056,160 @@ $($_.InvocationInfo.ScriptLineNumber)
 COMMAND:
 $($_.InvocationInfo.Line)
 "@
-            $statusPill.Text = "[ ERROR ]"
-            $statusPill.ForeColor = [System.Drawing.Color]::Red
-            $statusText.Text = "Validation execution failed"
-        }
-        finally {
-            $form.Cursor = [System.Windows.Forms.Cursors]::Default
-            $btnRun.Enabled = $true
-        }
-    })
+        $statusPill.Text = "[ ERROR ]"
+        $statusPill.ForeColor = [System.Drawing.Color]::Red
+        $statusText.Text = "Validation execution failed"
+    } finally {
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        $btnRun.Enabled = $true
+    }
+})
 
 # ==========================================================
 # EXECUTIVE HTML REPORT EXPORT (WITH PRINT & AUTO-COLLAPSE)
 # ==========================================================
 
 $btnExportHtml.Add_Click({
-        if ([string]::IsNullOrWhiteSpace($output.Text) -or $null -eq $script:LastReportData) {
-            [System.Windows.Forms.MessageBox]::Show("There is no report to export. Run validation first.", "Nothing to Export") | Out-Null
-            return
-        }
-        try {
-            $data = $script:LastReportData
-            $m = $data.Metrics
-            $cust = if ($data.Customer.Trim()) { ($data.Customer.Trim() -replace '[^\w\-]', '_') } else { "Cust" }
-            $inc = if ($data.INC.Trim()) { ($data.INC.Trim() -replace '[^\w\-]', '') }       else { "INC" }
-            $file = Join-Path $env:USERPROFILE ("Desktop\P2PValidation_v80_${cust}_${inc}_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".html")
+    if ([string]::IsNullOrWhiteSpace($output.Text) -or $null -eq $script:LastReportData) {
+        [System.Windows.Forms.MessageBox]::Show("There is no report to export. Run validation first.", "Nothing to Export") | Out-Null
+        return
+    }
+    try {
+        $data = $script:LastReportData
+        $m    = $data.Metrics
+        $cust = if ($data.Customer.Trim()) { ($data.Customer.Trim() -replace '[^\w\-]', '_') } else { "Cust" }
+        $inc  = if ($data.INC.Trim())      { ($data.INC.Trim() -replace '[^\w\-]', '') }       else { "INC" }
+        $file = Join-Path $env:USERPROFILE ("Desktop\P2PValidation_v80_${cust}_${inc}_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".html")
         
-            $recClass = "badge-ok"
-            if ($data.Recommendation -match "WARNINGS") { $recClass = "badge-warn" }
-            elseif ($data.Recommendation -match "REVIEW") { $recClass = "badge-fail" }
+        $recClass = "badge-ok"
+        if ($data.Recommendation -match "WARNINGS") { $recClass = "badge-warn" }
+        elseif ($data.Recommendation -match "REVIEW") { $recClass = "badge-fail" }
 
-            $riskColor = "#34d399"
-            if ($data.RiskLevel -match "HIGH") { $riskColor = "#f87171" }
-            elseif ($data.RiskLevel -match "MEDIUM") { $riskColor = "#fbbf24" }
+        $riskColor = "#34d399"
+        if ($data.RiskLevel -match "HIGH") { $riskColor = "#f87171" }
+        elseif ($data.RiskLevel -match "MEDIUM") { $riskColor = "#fbbf24" }
 
-            # Smart Action Box
-            $actionItems = @()
-            $critFound = @($m.CriticalList | Where-Object { $_.Count -gt 0 })
-            foreach ($c in $critFound) {
-                $loc = if ($c.LogFile) { " (Found In: $($c.LogFile))" } else { "" }
-                $actionItems += "Review <strong>$($c.Pattern)</strong> occurrences$loc"
-            }
-            if (-not $data.WrapperOk) {
-                $actionItems += "Review wrapper.conf property discrepancies flagged in Section 5"
-            }
-            else {
-                $actionItems += "<span style='color:#34d399;'>&check; No Wrapper Issues Detected</span>"
-            }
-            $totalDiffs = $data.OnlyOnReference.Count + $data.OnlyOnPublic.Count
-            if ($totalDiffs -gt 0 -and $data.ReferenceRequiredMissing.Count -gt 0) {
-                $actionItems += "Resolve missing reference components on Public: $($data.ReferenceRequiredMissing -join ', ')"
-            }
-            else {
-                $actionItems += "<span style='color:#34d399;'>&check; No Reference Differences Detected</span>"
-            }
+        # Smart Action Box
+        $actionItems = @()
+        $critFound = @($m.CriticalList | Where-Object { $_.Count -gt 0 })
+        foreach ($c in $critFound) {
+            $loc = if ($c.LogFile) { " (Found In: $($c.LogFile))" } else { "" }
+            $actionItems += "Review <strong>$($c.Pattern)</strong> occurrences$loc"
+        }
+        if (-not $data.WrapperOk) {
+            $actionItems += "Review wrapper.conf property discrepancies flagged in Section 5"
+        } else {
+            $actionItems += "<span style='color:#34d399;'>&check; No Wrapper Issues Detected</span>"
+        }
+        $totalDiffs = $data.OnlyOnReference.Count + $data.OnlyOnPublic.Count
+        if ($totalDiffs -gt 0 -and $data.ReferenceRequiredMissing.Count -gt 0) {
+            $actionItems += "Resolve missing reference components on Public: $($data.ReferenceRequiredMissing -join ', ')"
+        } else {
+            $actionItems += "<span style='color:#34d399;'>&check; No Reference Differences Detected</span>"
+        }
 
-            $actionHtml = "<ul class='action-list'>"
-            foreach ($item in $actionItems) { $actionHtml += "<li>$item</li>" }
-            $actionHtml += "</ul>"
+        # ActiveMQ Manual Verification in Action Box (HTML Links created ONLY here)
+        if ($data.PubData.AmqFolders.Count -gt 0) {
+            $amqLinks = ($data.AmqUrls | ForEach-Object { "<a href='$_' target='_blank' style='color:#60a5fa;text-decoration:underline;'>$_</a>" }) -join " &bull; "
+            $actionItems += "ActiveMQ Console URLs (Manual Browser Verification): $amqLinks"
+        }
 
-            # Services Rows
-            $svcRows = ""
-            foreach ($s in $data.PubData.Applications) {
-                $mode = if ($s.StartMode -eq "Auto" -and $s.DelayedAutoStart) { "Delayed Auto" } else { $s.StartMode }
-                $ok = ($s.State -eq "Running" -and $mode -match "Auto" -and -not [string]::IsNullOrWhiteSpace($s.StartName))
-                $st = if ($ok) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' }
-                $svcRows += "<tr><td>$($s.ServiceName)</td><td>$($s.State)</td><td>$mode</td><td>$($s.StartName)</td><td>$st</td></tr>"
+        $actionHtml = "<ul class='action-list'>"
+        foreach ($item in $actionItems) { $actionHtml += "<li>$item</li>" }
+        $actionHtml += "</ul>"
+
+        # Services Rows
+        $svcRows = ""
+        foreach ($s in $data.PubData.Applications) {
+            $mode = if ($s.StartMode -eq "Auto" -and $s.DelayedAutoStart) { "Delayed Auto" } else { $s.StartMode }
+            $ok = ($s.State -eq "Running" -and $mode -match "Auto" -and -not [string]::IsNullOrWhiteSpace($s.StartName))
+            $st = if ($ok) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' }
+            $svcRows += "<tr><td>$($s.ServiceName)</td><td>$($s.State)</td><td>$mode</td><td>$($s.StartName)</td><td>$st</td></tr>"
+        }
+
+        # Critical Rows
+        $critRows = ""
+        foreach ($ci in $m.CriticalList) {
+            $st = if ($ci.Count -gt 0) { '<span class="badge warn">WARNING</span>' } else { '<span class="badge pass">PASS</span>' }
+            $fileLabel = if ($ci.Count -gt 0 -and $ci.LogFile) { "<span class='log-file'>$($ci.LogFile)</span>" } else { "" }
+            $samp = if ($ci.Count -gt 0 -and $ci.Sample) { "<br><span class='code-sample'>Sample: $([System.Net.WebUtility]::HtmlEncode($ci.Sample))</span>" } else { "" }
+            $critRows += "<tr><td><strong>$($ci.Pattern)</strong></td><td>$($ci.Count)</td><td>$st $fileLabel $samp</td></tr>"
+        }
+
+        # Actionable Log Rows
+        $logRows = ""
+        if ($data.ActionableLogs.Count -gt 0) {
+            foreach ($lr in $data.ActionableLogs) {
+                $logRows += "<tr><td>$($lr.AppFolder)</td><td>$($lr.LogName)</td><td>$($lr.Errors)</td><td>$($lr.Fatals)</td><td>$($lr.Exceptions)</td><td><span class='badge warn'>WARNING</span></td></tr>"
             }
+        } else {
+            $logRows = "<tr><td colspan='6' style='text-align:center;color:#34d399;'>All scanned application logs are clean (0 Errors, 0 Fatals, 0 Exceptions)</td></tr>"
+        }
 
-            # Critical Rows
-            $critRows = ""
-            foreach ($ci in $m.CriticalList) {
-                $st = if ($ci.Count -gt 0) { '<span class="badge warn">WARNING</span>' } else { '<span class="badge pass">PASS</span>' }
-                $fileLabel = if ($ci.Count -gt 0 -and $ci.LogFile) { "<span class='log-file'>$($ci.LogFile)</span>" } else { "" }
-                $samp = if ($ci.Count -gt 0 -and $ci.Sample) { "<br><span class='code-sample'>Sample: $([System.Net.WebUtility]::HtmlEncode($ci.Sample))</span>" } else { "" }
-                $critRows += "<tr><td><strong>$($ci.Pattern)</strong></td><td>$($ci.Count)</td><td>$st $fileLabel $samp</td></tr>"
-            }
+        $diffValColor = if ($totalDiffs -eq 0) { "#34d399" } else { "#fbbf24" }
 
-            # Actionable Log Rows
-            $logRows = ""
-            if ($data.ActionableLogs.Count -gt 0) {
-                foreach ($lr in $data.ActionableLogs) {
-                    $logRows += "<tr><td>$($lr.AppFolder)</td><td>$($lr.LogName)</td><td>$($lr.Errors)</td><td>$($lr.Fatals)</td><td>$($lr.Exceptions)</td><td><span class='badge warn'>WARNING</span></td></tr>"
-                }
-            }
-            else {
-                $logRows = "<tr><td colspan='6' style='text-align:center;color:#34d399;'>All scanned application logs are clean (0 Errors, 0 Fatals, 0 Exceptions)</td></tr>"
-            }
-
-            $diffValColor = if ($totalDiffs -eq 0) { "#34d399" } else { "#fbbf24" }
-
-            # AMQ Tile
-            $amqTileHtml = ""
-            if ($m.AmqReachable) {
-                $amqTileHtml = @"
+        # SERVER ACCESS Tile
+        $serverAccessTileHtml = @"
             <div class="metric-card">
-                <div class="metric-label">AMQ CONSOLE</div>
-                <div class="metric-value" style="color:#34d399;">PORT $($m.AmqPortFound)</div>
+                <div class="metric-label">SERVER ACCESS</div>
+                <div class="metric-value" style="font-size:13px;color:#34d399;font-weight:700;line-height:1.4;">
+                    REF: Reachable<br>PUB: Reachable
+                </div>
             </div>
 "@
-            }
 
-            # Auto-collapse: Open accordions only if issues exist
-            $critAccordionOpen = if ($data.TotalCritical -gt 0) { "open" } else { "" }
-            $logAccordionOpen = if ($data.ActionableLogs.Count -gt 0) { "open" } else { "" }
-            $diffAccordionOpen = if ($totalDiffs -gt 0) { "open" } else { "" }
+        # ACTIVE MQ Installed Tile with Ports
+        $amqInstalled = ($data.PubData.AmqFolders.Count -gt 0)
+        $amqStatusText  = if ($amqInstalled) { "INSTALLED" } else { "NOT INSTALLED" }
+        $amqStatusColor = if ($amqInstalled) { "#34d399" } else { "#9ca3af" }
+        $amqPorts = if ($data.PubData.AmqListeningPorts.Count -gt 0) {
+            $data.PubData.AmqListeningPorts -join ","
+        } else {
+            "N/A"
+        }
 
-            $safeFullText = [System.Net.WebUtility]::HtmlEncode($data.FullReportText)
-            $safeFullText = $safeFullText -replace '\[PASS\]', '<span class="badge pass">PASS</span>'
-            $safeFullText = $safeFullText -replace '\[FAIL\]', '<span class="badge fail">FAIL</span>'
-            $safeFullText = $safeFullText -replace '\[WARNING\]', '<span class="badge warn">WARN</span>'
-            $safeFullText = $safeFullText -replace '\[INFO\]', '<span class="badge info">INFO</span>'
-            $safeFullText = $safeFullText -replace '\[OK\]', '<span class="badge pass">OK</span>'
+        $amqTileHtml = @"
+            <div class="metric-card">
+                <div class="metric-label">ACTIVE MQ</div>
+                <div class="metric-value" style="color:$amqStatusColor;">
+                    $amqStatusText
+                </div>
+                <div style="font-size:11px;color:#d1d5db;margin-top:3px;">
+                    Ports: $amqPorts
+                </div>
+            </div>
+"@
 
-            $htmlContent = @"
+        # WRAPPER Summary Tile (e.g., 6/6 PASS | 4 Custom Props)
+        $wrapPassTotal   = "$($data.WrapperPassCount)/$($data.MatchedPairs.Count) PASS"
+        $wrapStatColor   = if ($data.WrapperOk -and $data.MatchedPairs.Count -gt 0) { "#34d399" } else { "#f87171" }
+        $wrapperTileHtml = @"
+            <div class="metric-card">
+                <div class="metric-label">WRAPPER (4 PROPS)</div>
+                <div class="metric-value" style="color:$wrapStatColor;">$wrapPassTotal</div>
+            </div>
+"@
+
+        # Customer / INC Display Fix (ikea () -> ikea)
+        $custIncHtml = if ([string]::IsNullOrWhiteSpace($data.INC)) {
+            [System.Net.WebUtility]::HtmlEncode($data.Customer)
+        } else {
+            "$([System.Net.WebUtility]::HtmlEncode($data.Customer)) <span style=""font-size:12px;color:#9ca3af;"">($([System.Net.WebUtility]::HtmlEncode($data.INC)))</span>"
+        }
+
+        # Auto-collapse: Open accordions only if issues exist
+        $critAccordionOpen = if ($data.TotalCritical -gt 0) { "open" } else { "" }
+        $logAccordionOpen  = if ($data.ActionableLogs.Count -gt 0) { "open" } else { "" }
+        $diffAccordionOpen = if ($totalDiffs -gt 0) { "open" } else { "" }
+
+        $safeFullText = [System.Net.WebUtility]::HtmlEncode($data.FullReportText)
+        $safeFullText = $safeFullText -replace '\[PASS\]', '<span class="badge pass">PASS</span>'
+        $safeFullText = $safeFullText -replace '\[FAIL\]', '<span class="badge fail">FAIL</span>'
+        $safeFullText = $safeFullText -replace '\[WARNING\]', '<span class="badge warn">WARN</span>'
+        $safeFullText = $safeFullText -replace '\[INFO\]', '<span class="badge info">INFO</span>'
+        $safeFullText = $safeFullText -replace '\[OK\]', '<span class="badge pass">OK</span>'
+
+        $htmlContent = @"
 <!DOCTYPE html>
 <html>
 <head>
@@ -1195,7 +1232,7 @@ $btnExportHtml.Add_Click({
         .logo-title { font-size: 19px; font-weight: 800; color: #e5e7eb; letter-spacing: 0.5px; }
         .timestamp { font-size: 12px; color: #9ca3af; }
         
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
         .metric-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 14px 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
         .metric-label { font-size: 11px; text-transform: uppercase; color: #9ca3af; font-weight: 700; margin-bottom: 5px; letter-spacing: 0.5px; }
         .metric-value { font-size: 20px; font-weight: 700; color: #ffffff; }
@@ -1269,8 +1306,9 @@ $btnExportHtml.Add_Click({
             <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="metric-label">CUSTOMER / INC</div>
-                    <div class="metric-value">$($data.Customer) <span style="font-size:12px;color:#9ca3af;">($($data.INC))</span></div>
+                    <div class="metric-value">$custIncHtml</div>
                 </div>
+                $serverAccessTileHtml
                 <div class="metric-card">
                     <div class="metric-label">SERVERS (REF &rarr; PUB)</div>
                     <div class="metric-value" style="font-size:13px;word-break:break-all;">$($data.ReferenceServer)<br>&rarr; $($data.PublicServer)</div>
@@ -1279,6 +1317,8 @@ $btnExportHtml.Add_Click({
                     <div class="metric-label">MRT MATCH</div>
                     <div class="metric-value">$($data.MatchedPairs.Count) / $($data.PrivData.Applications.Count)</div>
                 </div>
+                $wrapperTileHtml
+                $amqTileHtml
                 <div class="metric-card">
                     <div class="metric-label">RISK LEVEL</div>
                     <div class="metric-value val-risk">$($data.RiskLevel)</div>
@@ -1287,7 +1327,6 @@ $btnExportHtml.Add_Click({
                     <div class="metric-label">DIFFERENCES</div>
                     <div class="metric-value val-diff">$totalDiffs</div>
                 </div>
-                $amqTileHtml
             </div>
 
             <div class="decision-banner $recClass">
@@ -1303,13 +1342,13 @@ $btnExportHtml.Add_Click({
         <div class="scope-card">
             <div class="scope-title">Validation Scope</div>
             <ul class="scope-list">
-                <li>&check; MRT Mapping</li>
-                <li>&check; Services & Accounts</li>
-                <li>&check; Wrapper Configuration</li>
-                <li>&check; Temp Folders</li>
-                <li>&check; ActiveMQ Discovery</li>
-                <li>&check; Environment & Java</li>
-                <li>&check; Log Escalation Signatures</li>
+                <li>&#10003; MRT Mapping</li>
+                <li>&#10003; Services &amp; Accounts</li>
+                <li>&#10003; Wrapper Configuration (4 Custom Props)</li>
+                <li>&#10003; Temp Folders</li>
+                <li>&#10003; ActiveMQ Discovery</li>
+                <li>&#10003; Environment &amp; Java</li>
+                <li>&#10003; Log Escalation Signatures</li>
             </ul>
         </div>
 
@@ -1327,7 +1366,7 @@ $btnExportHtml.Add_Click({
                 <div class="matrix-item"><span>Public Services</span> $(if ($data.SvcOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
                 <div class="matrix-item"><span>Folders & Temp</span> $(if ($data.FolderOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
                 <div class="matrix-item"><span>Environment & Java</span> $(if ($data.EnvOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
-                <div class="matrix-item"><span>Wrapper Conf</span> $(if ($data.WrapperOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
+                <div class="matrix-item"><span>Wrapper Conf (4 Props)</span> $(if ($data.WrapperOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
                 <div class="matrix-item"><span>Critical Signatures</span> $(if ($data.TotalCritical -eq 0) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
             </div>
         </div>
@@ -1395,14 +1434,13 @@ $btnExportHtml.Add_Click({
 </html>
 "@
 
-            $htmlContent | Set-Content -Path $file -Encoding UTF8 -ErrorAction Stop
-            $statusText.Text = "Executive HTML Dashboard Saved & Opened!"
-            Start-Process $file
-        }
-        catch {
-            [System.Windows.Forms.MessageBox]::Show("HTML Export Failed:`n$($_.Exception.Message)", "Error") | Out-Null
-        }
-    })
+        $htmlContent | Set-Content -Path $file -Encoding UTF8 -ErrorAction Stop
+        $statusText.Text = "Executive HTML Dashboard Saved & Opened!"
+        Start-Process $file
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("HTML Export Failed:`n$($_.Exception.Message)", "Error") | Out-Null
+    }
+})
 
 # ==========================================================
 # SHOW FORM
