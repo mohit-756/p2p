@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 
 $ErrorActionPreference = "Stop"
 
@@ -51,6 +51,7 @@ function Parse-WrapperConf {
         AnypointGatekeeper    = "Not Configured"
         AnypointBaseUri       = "Not Configured"
         JavaTmpDir            = "Not Configured"
+        MuleDeployApplications = "Missing"
     }
     
     if (-not $Content) { return $result }
@@ -83,6 +84,9 @@ function Parse-WrapperConf {
         }
 
         if ($line -match '-Djava\.io\.tmpdir=(.+)$') { $result.JavaTmpDir = $matches[1].Trim() }
+        if ($line -match '-Dmule\.deploy\.applications=(.+)$') {
+            $result.MuleDeployApplications = $matches[1].Trim().Trim('"').Trim("'")
+        }
     }
     return $result
 }
@@ -135,9 +139,8 @@ function Add-WrapperTable {
             $v2Norm = ($v2 -replace '<[^>]+>', '').Trim().TrimEnd('/') -replace ':443$', ''
             if ($v1Norm -eq $v2Norm -and $v1Norm -notin @("Missing", "Not Configured")) {
                 $status = "[PASS]"
-                $region = if ($v1Norm -match '//([^\.]+)\.') { $matches[1] } else { "Valid" }
-                $dispV1 = "Configured ($region)"
-                $dispV2 = "Configured ($region)"
+                $dispV1 = "Configured"
+                $dispV2 = "Configured"
             } elseif ($v1Norm -in @("Missing", "Not Configured") -and $v2Norm -in @("Missing", "Not Configured")) {
                 $status = "[PASS]"
                 $dispV1 = "Not Configured"
@@ -155,6 +158,22 @@ function Add-WrapperTable {
             }
         }
         $Report.Add(("{0,-24} {1,-20} {2,-20} {3}" -f $key, $dispV1, $dispV2, $status))
+    }
+
+    if ($Title -match "GGSVC") {
+        $svcPresent = $PubParsed.MuleDeployApplications -eq "connect-config-service"
+        $svcStatus  = if ($svcPresent) { "[PASS]" } else { "[FAIL]" }
+
+        $Report.Add(
+            ("{0,-24} {1,-20} {2}" -f
+            "MuleDeployApplications",
+            $(if ($svcPresent) { "Present" } else { "Missing" }),
+            $svcStatus)
+        )
+
+        if (-not $svcPresent) {
+            $allPassed = $false
+        }
     }
 
     # JavaTmpDir presence check
@@ -690,9 +709,9 @@ $btnRun.Add_Click({
 
         # AMQ Plain URL Strings generated in main engine (No HTML, no anchor tags)
         $AmqUrls = @(
-            "http://$NewServer`:11080/index.html",
-            "http://$NewServer`:31080/index.html",
-            "http://$NewServer`:51080/index.html"
+            "http://${NewServer}:11080/index.html",
+            "http://${NewServer}:31080/index.html",
+            "http://${NewServer}:51080/index.html"
         )
 
         # ==========================================================
@@ -859,38 +878,52 @@ $btnRun.Add_Click({
         $pAmq = ($PrivData.AmqFolders.Count -gt 0)
         $nAmq = ($PubData.AmqFolders.Count -gt 0)
         $amqOk = $true
-        if ($pAmq -and $nAmq) {
-            $Report.Add(("ActiveMQ     : Present on Reference and Public ({0})  [PASS]" -f ($PubData.AmqFolders -join ', ')))
-        } elseif (-not $pAmq -and -not $nAmq) {
-            $Report.Add("ActiveMQ     : Not Present on Reference Server - Not Required  [PASS]")
-        } elseif ($pAmq -and -not $nAmq) {
-            $Report.Add("ActiveMQ     : Present on Reference But Missing on Public  [FAIL]")
+        if ($pAmq -and -not $nAmq) {
             $RiskItems += "ActiveMQ present on Reference server but missing on Public"
             $OnlyOnReference += "ActiveMQ"
             $ReferenceRequiredMissing += "ActiveMQ"
             $amqOk = $false
-        } else {
-            $Report.Add(("ActiveMQ     : Present Only on Public ({0})  [INFO]" -f ($PubData.AmqFolders -join ', ')))
+        } elseif (-not $pAmq -and $nAmq) {
             $OnlyOnPublic += "ActiveMQ"
         }
 
-        # AMQ Listener Ports, Status & Console URLs
-        if ($PubData.AmqFolders.Count -gt 0) {
-            if ($PubData.AmqListeningPorts.Count -gt 0) {
-                $Report.Add("")
-                $Report.Add(
-                    ("AMQ Listener Ports : {0}" -f ($PubData.AmqListeningPorts -join ", "))
-                )
-                $Report.Add(
-                    "AMQ Status         : LISTENING [PASS]"
-                )
+        # ACTIVE MQ VALIDATION
+        $Report.Add("")
+        $Report.Add("ACTIVE MQ VALIDATION")
+        $Report.Add("------------------------------------------------")
+        $instStatus = if ($nAmq) { "PASS" } elseif (-not $pAmq) { "NOT REQUIRED [PASS]" } else { "FAIL" }
+        $Report.Add(("Installed       : {0}" -f $instStatus))
+        $listenPortsStr = if ($PubData.AmqListeningPorts.Count -gt 0) { ($PubData.AmqListeningPorts -join ", ") } else { "None" }
+        $Report.Add(("Listener Ports  : {0}" -f $listenPortsStr))
+        
+        $suggestedUrl = $null
+        $otherUrls = [System.Collections.Generic.List[string]]::new()
+        foreach ($u in $AmqUrls) {
+            $port = if ($u -match ':(\d+)/') { [int]$matches[1] } else { 0 }
+            if ($PubData.AmqListeningPorts -contains $port -and -not $suggestedUrl) {
+                $suggestedUrl = $u
+            } else {
+                $otherUrls.Add($u)
             }
+        }
+        if (-not $suggestedUrl -and $AmqUrls.Count -gt 0) {
+            $suggestedUrl = $AmqUrls[0]
+            if ($otherUrls.Count -gt 0) { $otherUrls.RemoveAt(0) }
+        }
 
-            $Report.Add("")
-            $Report.Add("AMQ Console URLs :")
-            foreach ($u in $AmqUrls) {
-                $Report.Add("  $u")
-            }
+        $Report.Add("")
+        $detectedPort = if ($PubData.AmqListeningPorts.Count -gt 0) { $PubData.AmqListeningPorts[0] } else { "None" }
+        $Report.Add(("Detected Port   : {0}" -f $detectedPort))
+        $Report.Add("")
+        $Report.Add("Suggested URL   :")
+        if ($suggestedUrl) {
+            $Report.Add("  $suggestedUrl")
+        }
+        $Report.Add("")
+        $Report.Add("Other URLs")
+        $Report.Add("----------")
+        foreach ($u in $otherUrls) {
+            $Report.Add("  $u")
         }
 
         # 5. DYNAMIC WRAPPER CONFIGURATION TABLES
@@ -921,8 +954,8 @@ $btnRun.Add_Click({
             $Report.Add("[PASS] All scanned application log files are clean (0 Errors, 0 Fatals, 0 Exceptions).")
         }
 
-        # 7. CRITICAL ERROR ANALYSIS
-        Add-ReportSection -Report $Report -Title "7. CRITICAL ERROR ANALYSIS"
+        # 7. ESCALATION SIGNATURE ANALYSIS
+        Add-ReportSection -Report $Report -Title "7. ESCALATION SIGNATURE ANALYSIS"
         $totalCritical = 0
         if ($m.CriticalList) {
             foreach ($item in $m.CriticalList) {
@@ -983,7 +1016,7 @@ $btnRun.Add_Click({
         $Report.Add(("Matched MRTs                   : {0}" -f $matchedPairs.Count))
         $Report.Add(("Applications With Log Warnings : {0}" -f $appWarningCount))
         $Report.Add(("Wrapper Matches                : {0}/{1}" -f $wrapPassCount, $matchedPairs.Count))
-        $Report.Add("Wrapper Custom Properties Checked : 4 (Oracle JDBC, Gatekeeper, Base URI, JavaTmpDir)")
+        $Report.Add("Wrapper Custom Properties Checked : 4")
         $Report.Add(("Service Matches                : {0}/{1}" -f $PubData.Applications.Count, $PubData.Applications.Count))
         $Report.Add(("Critical Errors Found          : {0}" -f $totalCritical))
         $Report.Add(("Reference Differences          : {0}" -f ($OnlyOnReference.Count + $OnlyOnPublic.Count)))
@@ -995,7 +1028,7 @@ $btnRun.Add_Click({
         $Report.Add(("{0,-26} : {1}" -f "Folders & Temp", $(if ($folderSectionOk) { "PASS" } else { "FAIL" })))
         $Report.Add(("{0,-26} : {1}" -f "Environment & Java", $(if ($resStat -match "PASS" -and $amqOk) { "PASS" } else { "WARNING" })))
         $Report.Add(("{0,-26} : {1}" -f "Wrapper Configuration", $(if ($wrapperSectionOk) { "PASS" } else { "FAIL" })))
-        $Report.Add(("{0,-26} : {1}" -f "Critical Log Signatures", $(if ($totalCritical -eq 0) { "PASS" } else { "WARNING" })))
+        $Report.Add(("{0,-26} : {1}" -f "Escalation Signatures", $(if ($totalCritical -eq 0) { "PASS" } else { "WARNING" })))
         
         $recommendation = if ($FailCount -eq 0 -and $RiskItems.Count -eq 0) {
             "READY FOR CUTOVER"
@@ -1021,7 +1054,7 @@ $btnRun.Add_Click({
         $Report.Add(("  {0} Directory, JConn & Temp Structure (Reference-Based)" -f $(if ($folderSectionOk) { "[OK]" } else { "[FAIL]" })))
         $Report.Add(("  {0} Environment & Java Validation" -f $(if ($resStat -match "PASS" -and $amqOk) { "[OK]" } else { "[WARNING]" })))
         $Report.Add(("  {0} Wrapper Memory & JMX Configuration" -f $(if ($wrapperSectionOk) { "[OK]" } else { "[FAIL]" })))
-        $Report.Add(("  {0} Critical Log Signatures ({1} Detected)" -f $(if ($totalCritical -eq 0) { "[OK]" } else { "[WARNING]" }), $totalCritical))
+        $Report.Add(("  {0} Escalation Signatures ({1} Detected)" -f $(if ($totalCritical -eq 0) { "[OK]" } else { "[WARNING]" }), $totalCritical))
         $Report.Add("")
         $Report.Add(("FINAL RESULT : {0} ({1} Failures Detected)" -f $recommendation, $FailCount))
         $Report.Add("====================================================================================")
@@ -1115,9 +1148,13 @@ $btnExportHtml.Add_Click({
         # Smart Action Box
         $actionItems = @()
         $critFound = @($m.CriticalList | Where-Object { $_.Count -gt 0 })
-        foreach ($c in $critFound) {
-            $loc = if ($c.LogFile) { " (Found In: $($c.LogFile))" } else { "" }
-            $actionItems += "Review <strong>$($c.Pattern)</strong> occurrences$loc"
+        if ($critFound.Count -gt 0) {
+            foreach ($c in $critFound) {
+                $loc = if ($c.LogFile) { " (Found In: $($c.LogFile))" } else { "" }
+                $actionItems += "Review <strong>$($c.Pattern)</strong> occurrences$loc"
+            }
+        } else {
+            $actionItems += "<span style='color:#34d399;'>&check; No Escalation Signatures Detected</span>"
         }
         if (-not $data.WrapperOk) {
             $actionItems += "Review wrapper.conf property discrepancies flagged in Section 5"
@@ -1125,16 +1162,17 @@ $btnExportHtml.Add_Click({
             $actionItems += "<span style='color:#34d399;'>&check; No Wrapper Issues Detected</span>"
         }
         $totalDiffs = $data.OnlyOnReference.Count + $data.OnlyOnPublic.Count
+        $appWarningCount = ($data.ActionableLogs | Select-Object AppFolder -Unique).Count
         if ($totalDiffs -gt 0 -and $data.ReferenceRequiredMissing.Count -gt 0) {
             $actionItems += "Resolve missing reference components on Public: $($data.ReferenceRequiredMissing -join ', ')"
         } else {
             $actionItems += "<span style='color:#34d399;'>&check; No Reference Differences Detected</span>"
         }
 
-        # ActiveMQ Environment Badges in Action Box
+        # ActiveMQ Environment Badges in AMQ Grid
+        $amqRowsHtml = ""
         if ($data.PubData.AmqFolders.Count -gt 0) {
             $listeningSet = @($data.PubData.AmqListeningPorts)
-            $pillList = @()
             foreach ($u in $data.AmqUrls) {
                 $port = if ($u -match ':(\d+)/') { [int]$matches[1] } else { 0 }
                 $envLabel = switch ($port) {
@@ -1145,461 +1183,985 @@ $btnExportHtml.Add_Click({
                 }
                 $isListening = ($listeningSet -contains $port)
                 if ($isListening) {
-                    $pillList += "<a href='$u' target='_blank' class='amq-pill active-listener'><span class='env-tag'>$envLabel ($port)</span> <span class='live-badge'>&#9679; LISTENING</span> <span class='pill-url'>$u</span></a>"
+                    $amqRowsHtml += "<a href='$u' target='_blank' class='amq-row listening'><span class='amq-env ae-qa'>$envLabel</span><span class='amq-url-text'>$u</span><span class='amq-status-tag'><span class='live-dot'></span> LISTENING</span></a>"
                 } else {
-                    $pillList += "<a href='$u' target='_blank' class='amq-pill'><span class='env-tag'>$envLabel ($port)</span> <span class='pill-url'>$u</span></a>"
+                    $aeClass = if ($envLabel -eq "PROD") { "ae-prod" } else { "ae-dev" }
+                    $amqRowsHtml += "<a href='$u' target='_blank' class='amq-row'><span class='amq-env $aeClass'>$envLabel</span><span class='amq-url-text'>$u</span></a>"
                 }
             }
-            $actionItems += "<div><strong>ActiveMQ Console URLs (Manual Browser Verification):</strong></div><div class='amq-pill-container'>" + ($pillList -join "") + "</div>"
+        } else {
+            $amqRowsHtml = "<div style='color:#9ca3af;font-size:12px;padding:8px 0;'>ActiveMQ is not installed on Public server.</div>"
         }
-
-        $actionHtml = "<ul class='action-list'>"
-        foreach ($item in $actionItems) { $actionHtml += "<li>$item</li>" }
-        $actionHtml += "</ul>"
 
         # Services Rows
         $svcRows = ""
         foreach ($s in $data.PubData.Applications) {
             $mode = if ($s.StartMode -eq "Auto" -and $s.DelayedAutoStart) { "Delayed Auto" } else { $s.StartMode }
             $ok = ($s.State -eq "Running" -and $mode -match "Auto" -and -not [string]::IsNullOrWhiteSpace($s.StartName))
-            $st = if ($ok) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' }
-            $svcRows += "<tr><td>$($s.ServiceName)</td><td>$($s.State)</td><td>$mode</td><td>$($s.StartName)</td><td>$st</td></tr>"
+            $st = if ($ok) { '<span class="badge b-pass">PASS</span>' } else { '<span class="badge b-fail">FAIL</span>' }
+            $svcRows += "<tr><td style='font-weight:700;'>$($s.ServiceName)</td><td><span class='badge b-run'>$($s.State)</span></td><td>$mode</td><td class='cell-mono'>$($s.StartName)</td><td>$st</td></tr>"
         }
 
         # Critical Rows
         $critRows = ""
         foreach ($ci in $m.CriticalList) {
-            $st = if ($ci.Count -gt 0) { '<span class="badge warn">WARNING</span>' } else { '<span class="badge pass">PASS</span>' }
-            $fileLabel = if ($ci.Count -gt 0 -and $ci.LogFile) { "<span class='log-file'>$($ci.LogFile)</span>" } else { "" }
-            $samp = if ($ci.Count -gt 0 -and $ci.Sample) { "<br><span class='code-sample'>Sample: $([System.Net.WebUtility]::HtmlEncode($ci.Sample))</span>" } else { "" }
-            $critRows += "<tr><td><strong>$($ci.Pattern)</strong></td><td>$($ci.Count)</td><td>$st $fileLabel $samp</td></tr>"
+            $st = if ($ci.Count -gt 0) { '<span class="badge b-warn">WARN</span>' } else { '<span class="badge b-pass">PASS</span>' }
+            $sev = switch -wildcard ($ci.Pattern) {
+                "*OutOfMemory*" { "CRITICAL" }
+                "*ORA-*"        { "CRITICAL" }
+                "*FileNotFound*" { "MEDIUM" }
+                default         { "HIGH" }
+            }
+            $fileLabel = if ($ci.Count -gt 0 -and $ci.LogFile) { "<span class='cell-mono' style='margin-left:8px;'>$($ci.LogFile)</span>" } else { "" }
+            $samp = if ($ci.Count -gt 0 -and $ci.Sample) { "<br><span style='color:#fca5a5;font-size:11px;font-family:Consolas,monospace;'>Sample: $([System.Net.WebUtility]::HtmlEncode($ci.Sample))</span>" } else { "" }
+            $critRows += "<tr><td class='cell-mono'><strong>$($ci.Pattern)</strong></td><td>$($ci.Count)</td><td>$sev</td><td>$st $fileLabel $samp</td></tr>"
         }
 
-        # Actionable Log Rows
+        # Actionable Log Rows with visual breakdown bar
         $logRows = ""
         if ($data.ActionableLogs.Count -gt 0) {
             foreach ($lr in $data.ActionableLogs) {
-                $logRows += "<tr><td>$($lr.AppFolder)</td><td>$($lr.LogName)</td><td>$($lr.Errors)</td><td>$($lr.Fatals)</td><td>$($lr.Exceptions)</td><td><span class='badge warn'>WARNING</span></td></tr>"
+                $errBar = ""
+                if ($lr.Errors -gt 0) {
+                    $w = [Math]::Min(60, [Math]::Max(20, $lr.Errors))
+                    $errBar += "<span class='es-err err-seg' style='width:${w}px;'>$($lr.Errors)</span>"
+                }
+                if ($lr.Fatals -gt 0) {
+                    $w = [Math]::Min(60, [Math]::Max(20, $lr.Fatals))
+                    $errBar += "<span class='es-fat err-seg' style='width:${w}px;'>$($lr.Fatals)</span>"
+                }
+                if ($lr.Exceptions -gt 0) {
+                    $w = [Math]::Min(60, [Math]::Max(20, $lr.Exceptions))
+                    $errBar += "<span class='es-exc err-seg' style='width:${w}px;'>$($lr.Exceptions)</span>"
+                }
+                if ([string]::IsNullOrEmpty($errBar)) {
+                    $errBar = "<span style='color:#6b7280;font-size:11px;'>Clean</span>"
+                }
+                $logRows += "<tr><td style='font-weight:700;'>$($lr.AppFolder)</td><td class='cell-mono'>$($lr.LogName)</td><td>$($lr.Errors)</td><td>$($lr.Fatals)</td><td>$($lr.Exceptions)</td><td><div class='err-bar'>$errBar</div></td><td><span class='badge b-warn'>WARN</span></td></tr>"
             }
         } else {
-            $logRows = "<tr><td colspan='6' style='text-align:center;color:#34d399;'>All scanned application logs are clean (0 Errors, 0 Fatals, 0 Exceptions)</td></tr>"
+            $logRows = "<tr><td colspan='7' style='text-align:center;color:#34d399;padding:16px;'>All scanned application logs are clean (0 Errors, 0 Fatals, 0 Exceptions)</td></tr>"
         }
 
-        $diffValColor = if ($totalDiffs -eq 0) { "#34d399" } else { "#fbbf24" }
+        $totalDiffs = $data.OnlyOnReference.Count + $data.OnlyOnPublic.Count
+        $appWarningCount = ($data.ActionableLogs | Select-Object AppFolder -Unique).Count
 
-        # SERVER ACCESS Tile
-        $serverAccessTileHtml = @"
-            <div class="metric-card">
-                <div class="metric-label">SERVER ACCESS</div>
-                <div class="metric-value" style="font-size:13px;color:#34d399;font-weight:700;line-height:1.4;">
-                    REF: Reachable<br>PUB: Reachable
-                </div>
-            </div>
-"@
+        # Customer / INC Display
+        $custDisplay = if ([string]::IsNullOrWhiteSpace($data.Customer)) { "Cust" } else { [System.Net.WebUtility]::HtmlEncode($data.Customer) }
+        $incDisplay  = if ([string]::IsNullOrWhiteSpace($data.INC)) { "N/A (Optional)" } else { [System.Net.WebUtility]::HtmlEncode($data.INC) }
 
-        # ACTIVE MQ Installed Tile with Ports (Cleaner: showing status & port)
-        $amqInstalled = ($data.PubData.AmqFolders.Count -gt 0)
-        $amqStatusText  = if ($amqInstalled) { "INSTALLED" } else { "NOT INSTALLED" }
-        $amqStatusColor = if ($amqInstalled) { "#34d399" } else { "#9ca3af" }
-        $amqPorts = if ($data.PubData.AmqListeningPorts.Count -gt 0) {
-            $data.PubData.AmqListeningPorts -join ","
-        } else {
-            "N/A"
-        }
-
-        $amqTileHtml = @"
-            <div class="metric-card">
-                <div class="metric-label">ACTIVE MQ</div>
-                <div class="metric-value" style="color:$amqStatusColor;">
-                    $amqStatusText
-                </div>
-                <div style="font-size:12px;color:#93c5fd;font-weight:700;margin-top:4px;font-family:Consolas,monospace;">
-                    $amqPorts
-                </div>
-            </div>
-"@
-
-        # WRAPPER Summary Tile (e.g., 6/6 PASS | 4 Custom Props)
-        $wrapPassTotal   = "$($data.WrapperPassCount)/$($data.MatchedPairs.Count) PASS"
-        $wrapStatColor   = if ($data.WrapperOk -and $data.MatchedPairs.Count -gt 0) { "#34d399" } else { "#f87171" }
-        $wrapperTileHtml = @"
-            <div class="metric-card">
-                <div class="metric-label">WRAPPER (4 PROPS)</div>
-                <div class="metric-value" style="color:$wrapStatColor;">$wrapPassTotal</div>
-            </div>
-"@
-
-        # Customer / INC Display Fix (ikea () -> ikea)
-        $custIncHtml = if ([string]::IsNullOrWhiteSpace($data.INC)) {
-            [System.Net.WebUtility]::HtmlEncode($data.Customer)
-        } else {
-            "$([System.Net.WebUtility]::HtmlEncode($data.Customer)) <span style=""font-size:12px;color:#9ca3af;"">($([System.Net.WebUtility]::HtmlEncode($data.INC)))</span>"
-        }
-
-        # Auto-collapse: Open accordions only if issues exist
-        $critAccordionOpen = if ($data.TotalCritical -gt 0) { "open" } else { "" }
-        $logAccordionOpen  = if ($data.ActionableLogs.Count -gt 0) { "open" } else { "" }
-        $diffAccordionOpen = if ($totalDiffs -gt 0) { "open" } else { "" }
+        # Heatmap status
+        $mrtHeatClass  = if ($data.MappingOk) { "heat-pass" } else { "heat-fail" }
+        $mrtHeatText   = "$($data.MatchedPairs.Count) / $($data.PrivData.Applications.Count) Matched"
+        $svcHeatClass  = if ($data.SvcOk) { "heat-pass" } else { "heat-fail" }
+        $svcHeatText   = "$($data.PubData.Applications.Count) / $($data.PubData.Applications.Count) Running"
+        $dirHeatClass  = if ($data.FolderOk) { "heat-pass" } else { "heat-fail" }
+        $envHeatClass  = if ($data.EnvOk) { "heat-pass" } else { "heat-warn" }
+        $wrapHeatClass = if ($data.WrapperOk) { "heat-pass" } else { "heat-fail" }
+        $wrapHeatText  = "$($data.WrapperPassCount) / $($data.MatchedPairs.Count) PASS"
+        $critHeatClass = if ($data.TotalCritical -eq 0) { "heat-pass" } else { "heat-warn" }
+        $critHeatText  = if ($data.TotalCritical -eq 0) { "0 Signatures" } else { "$($data.TotalCritical) Found" }
 
         $safeFullText = [System.Net.WebUtility]::HtmlEncode($data.FullReportText)
-        $safeFullText = $safeFullText -replace '\[PASS\]', '<span class="badge pass">PASS</span>'
-        $safeFullText = $safeFullText -replace '\[FAIL\]', '<span class="badge fail">FAIL</span>'
-        $safeFullText = $safeFullText -replace '\[WARNING\]', '<span class="badge warn">WARN</span>'
-        $safeFullText = $safeFullText -replace '\[INFO\]', '<span class="badge info">INFO</span>'
-        $safeFullText = $safeFullText -replace '\[OK\]', '<span class="badge pass">OK</span>'
+        $safeFullText = $safeFullText -replace '\[PASS\]', '<span class="p-pass">PASS</span>'
+        $safeFullText = $safeFullText -replace '\[FAIL\]', '<span class="badge b-fail">FAIL</span>'
+        $safeFullText = $safeFullText -replace '\[WARNING\]', '<span class="p-warn">WARN</span>'
+        $safeFullText = $safeFullText -replace '\[INFO\]', '<span class="badge b-run">INFO</span>'
+        $safeFullText = $safeFullText -replace '\[OK\]', '<span class="p-pass">OK</span>'
+
+        # Generate Action Checklist HTML
+        $actionItemsHtml = ""
+        foreach ($ai in $actionItems) {
+            $actionItemsHtml += "<div class='check-item'><span class='check-icon'>&#10003;</span><span>$ai</span></div>"
+        }
+
+        # Generate Interactive Wrapper Config Cards HTML
+        $wrapCardsHtml = "<div class='wrapper-grid'>"
+        foreach ($pair in $data.MatchedPairs) {
+            $pubApp = $pair.PublicApp
+            $pu = Parse-WrapperConf -Content $pubApp.WrapperLines
+            $isSvc = ($pair.Key -eq "GGSVC")
+            $cardClass = if ($isSvc) { "wrap-card wrap-special" } else { "wrap-card" }
+            $headerBg = if ($isSvc) { "background:#064e3b;" } else { "" }
+            $headerColor = if ($isSvc) { "color:#ecfdf5;" } else { "" }
+            $svcSubColor = if ($isSvc) { "color:#a7f3d0;" } else { "" }
+            
+            $wrapCardsHtml += "<div class='$cardClass'>"
+            $wrapCardsHtml += "  <div class='wrap-card-header' style='$headerBg'>"
+            $wrapCardsHtml += "    <span class='wrap-card-title' style='$headerColor'>$($pair.Key)</span>"
+            $wrapCardsHtml += "    <span class='wrap-card-svc' style='$svcSubColor'>$($pubApp.ServiceName)</span>"
+            $wrapCardsHtml += "  </div>"
+            $wrapCardsHtml += "  <div class='wrap-prop-row'><span class='wrap-prop-name'>Memory (Init / Max)</span><span class='wrap-prop-val'>$($pu.InitMemory) / $($pu.MaxMemory) MB</span></div>"
+            $wrapCardsHtml += "  <div class='wrap-prop-row'><span class='wrap-prop-name'>Metaspace (Init / Max)</span><span class='wrap-prop-val'>$($pu.MetaspaceSize) / $($pu.MaxMetaspaceSize)</span></div>"
+            $wrapCardsHtml += "  <div class='wrap-prop-row'><span class='wrap-prop-name'>JMX &amp; RMI Port</span><span class='wrap-prop-val'>$($pu.JmxPort) / $($pu.RmiPort)</span></div>"
+            if ($isSvc) {
+                $deploySt = if ($pu.MuleDeployApplications -eq "connect-config-service") { "<span style='color:#34d399;'>connect-config-service [PASS]</span>" } else { "<span style='color:#f87171;'>$($pu.MuleDeployApplications) [FAIL]</span>" }
+                $wrapCardsHtml += "  <div class='wrap-prop-row' style='background:rgba(16,185,129,0.15);'><span class='wrap-prop-name' style='color:#34d399;font-weight:800;'>MuleDeployApplications</span><span class='wrap-prop-val'>$deploySt</span></div>"
+            }
+            $wrapCardsHtml += "  <div class='wrap-prop-row'><span class='wrap-prop-name'>Oracle JDBC Compliant</span><span class='wrap-prop-val' style='color:#34d399;'>$($pu.OracleJdbcCompliance) [PASS]</span></div>"
+            $tmpStatus = if ($pu.JavaTmpDir -notin @('Missing','Not Configured')) { "<span style='color:#34d399;'>Configured [PASS]</span>" } else { "Not Set (Matched)" }
+            $wrapCardsHtml += "  <div class='wrap-prop-row'><span class='wrap-prop-name'>JavaTmpDir</span><span class='wrap-prop-val'>$tmpStatus</span></div>"
+            $wrapCardsHtml += "</div>"
+        }
+        $wrapCardsHtml += "</div>"
 
         $htmlContent = @"
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>P2P Migration Decision Dashboard - $($data.Customer)</title>
-    <style>
-        body { background-color: #111827; color: #e2e8f0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; margin: 0; padding: 25px; }
-        .container { max-width: 1120px; margin: 0 auto; }
-        
-        .dashboard-header {
-            position: relative;
-            background: #1e293b;
-            border: 1px solid #374151;
-            border-radius: 10px;
-            padding: 22px 28px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-            margin-bottom: 20px;
-        }
-        .header-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #374151; padding-bottom: 14px; margin-bottom: 18px; }
-        .logo-title { font-size: 19px; font-weight: 800; color: #e5e7eb; letter-spacing: 0.5px; }
-        .timestamp { font-size: 12px; color: #9ca3af; }
-        
-        .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
-        @media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
-        .metric-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 14px 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .metric-label { font-size: 11px; text-transform: uppercase; color: #9ca3af; font-weight: 700; margin-bottom: 5px; letter-spacing: 0.5px; }
-        .metric-value { font-size: 20px; font-weight: 700; color: #ffffff; }
-        .val-risk { font-size: 24px; font-weight: 800; color: $riskColor; }
-        .val-diff { color: $diffValColor; font-weight: 800; }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P2P Migration Cutover Decision - $($data.Customer)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root {
+    --bg-page: #030712;
+    --bg-card: #111827;
+    --bg-card-hover: #1f2937;
+    --bg-subtle: #0f172a;
+    --border-color: #1f2937;
+    --border-highlight: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --emerald-main: #10b981;
+    --emerald-glow: rgba(16, 185, 129, 0.22);
+    --hero-bg: linear-gradient(135deg, #022c22 0%, #064e3b 50%, #065f46 100%);
+    --heat-pass-bg: #022c22;
+    --heat-pass-bdr: #059669;
+    --heat-pass-txt: #34d399;
+    --badge-pass-bg: #064e3b;
+    --badge-pass-txt: #34d399;
+    --badge-pass-bdr: #059669;
+    --badge-warn-bg: #451a03;
+    --badge-warn-txt: #fde68a;
+    --badge-warn-bdr: #b45309;
+    --badge-fail-bg: #450a0a;
+    --badge-fail-txt: #f87171;
+    --badge-fail-bdr: #b91c1c;
+    --tab-active-bg: #111827;
+    --tab-active-txt: #34d399;
+    --terminal-bg: #050811;
+  }
 
-        .decision-banner { padding: 16px 22px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
-        .badge-ok { background: #064e3b; border: 1px solid #059669; color: #34d399; }
-        .badge-warn { background: #78350f; border: 1px solid #d97706; color: #fde68a; }
-        .badge-fail { background: #7f1d1d; border: 1px solid #dc2626; color: #fecaca; }
-        .decision-title { font-size: 11.5px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; opacity: 0.9; }
-        .decision-text { font-size: 26px; font-weight: 800; letter-spacing: 0.5px; }
-        .decision-subtitle { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 6px; opacity: 0.95; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
 
-        .scope-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .scope-title { font-size: 12px; text-transform: uppercase; font-weight: 800; color: #e5e7eb; letter-spacing: 0.5px; margin-bottom: 10px; }
-        .scope-list { margin: 0; padding: 0; list-style: none; color: #d1d5db; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
-        .scope-list li { display: flex; align-items: center; gap: 8px; }
-        .scope-check { color: #34d399; font-weight: 800; font-size: 14px; }
+  /* ── Hero Banner ─────────────────────────────────────── */
+  .hero {
+    background: var(--hero-bg);
+    padding: 24px 20px 22px;
+    color: #fff;
+    border-bottom: 2px solid var(--emerald-main);
+  }
+  .hero-inner {
+    max-width: min(1360px, 94vw);
+    margin: 0 auto;
+    width: 100%;
+  }
+  .hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .hero-brand {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #6ee7b7;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: #a7f3d0;
+    flex-wrap: wrap;
+  }
+  .hero-meta strong { color: #ecfdf5; }
 
-        .action-box { background: #1e1b4b; border-left: 4px solid #6366f1; border-radius: 8px; padding: 16px 22px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .action-title { font-size: 13px; font-weight: 800; color: #a5b4fc; text-transform: uppercase; margin-bottom: 8px; }
-        .action-list { margin: 0; padding-left: 20px; color: #e0e7ff; line-height: 1.6; font-size: 13px; }
+  .hero-content {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .hero-verdict-text {
+    font-size: clamp(26px, 3.2vw, 36px);
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+    color: #ecfdf5;
+    text-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+  }
+  .hero-sub {
+    font-size: 12.5px;
+    color: #a7f3d0;
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+  }
+  .hero-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    text-align: center;
+    min-width: 84px;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    flex: 1 1 auto;
+  }
+  .hero-stat-value {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1;
+    color: #34d399;
+  }
+  .hero-stat-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #a7f3d0;
+    margin-top: 5px;
+  }
 
-        .amq-pill-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; margin-bottom: 4px; }
-        .amq-pill { display: inline-flex; align-items: center; gap: 8px; background: #111827; border: 1px solid #374151; padding: 7px 14px; border-radius: 6px; color: #93c5fd; text-decoration: none; font-size: 12px; font-family: Consolas, monospace; transition: all 0.15s ease-in-out; }
-        .amq-pill:hover { background: #1f2937; border-color: #60a5fa; color: #ffffff; }
-        .amq-pill.active-listener { background: #064e3b; border-color: #10b981; color: #ecfdf5; box-shadow: 0 0 10px rgba(16, 185, 129, 0.25); }
-        .amq-pill.active-listener:hover { background: #047857; color: #ffffff; }
-        .amq-pill .env-tag { font-weight: 800; font-family: 'Segoe UI', sans-serif; letter-spacing: 0.5px; }
-        .amq-pill .live-badge { background: #10b981; color: #022c22; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.5px; font-family: 'Segoe UI', sans-serif; }
-        .amq-pill .pill-url { color: #d1d5db; font-size: 11px; }
-        .amq-pill.active-listener .pill-url { color: #a7f3d0; }
+  /* ── Container ───────────────────────────────────────── */
+  .container { max-width: min(1360px, 94vw); margin: 0 auto; padding: 24px 20px 60px; }
 
-        .matrix-card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        .matrix-title { font-size: 13.5px; font-weight: 800; color: #e5e7eb; text-transform: uppercase; margin-bottom: 14px; letter-spacing: 0.5px; }
-        .matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-        @media (max-width: 768px) { .matrix-grid { grid-template-columns: repeat(2, 1fr); } }
-        .matrix-item { background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 16px; min-height: 55px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+  /* ── Identification Strip ────────────────────────────── */
+  .id-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 22px;
+    background: var(--bg-card);
+  }
+  .id-cell {
+    padding: 14px 18px;
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .id-cell:last-child { border-right: none; }
+  .id-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .id-value { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+  .id-value.mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: 13px; color: #38bdf8; }
+  .id-value.green { color: var(--emerald-main); }
 
-        details { background: #1f2937; border: 1px solid #374151; border-radius: 8px; margin-bottom: 14px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-        summary { padding: 13px 18px; font-weight: 700; font-size: 13px; cursor: pointer; background: #1f2937; color: #d1d5db; user-select: none; }
-        summary:hover { background: #283548; color: #ffffff; }
-        .section-content { padding: 16px 20px; border-top: 1px solid #374151; background: #111827; }
-        
-        table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0; }
-        th { text-align: left; padding: 10px 12px; background: #1f2937; color: #9ca3af; font-size: 11px; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #374151; }
-        td { padding: 9px 12px; border-bottom: 1px solid #1f2937; color: #f3f4f6; }
-        tr:hover td { background: #1e293b; }
-        
-        .badge { padding: 3px 8px; border-radius: 4px; font-weight: 800; font-size: 11px; display: inline-block; min-width: 65px; text-align: center; }
-        .pass { background: #065f46; color: #34d399; }
-        .fail { background: #7f1d1d; color: #f87171; }
-        .warn { background: #78350f; color: #fbbf24; }
-        .info { background: #1e3a8a; color: #93c5fd; }
-        
-        .log-file { font-family: Consolas, monospace; font-size: 11px; color: #93c5fd; background: #1e3a8a; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-left: 8px; }
-        .code-sample { font-family: Consolas, monospace; font-size: 11px; color: #fca5a5; background: #450a0a; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }
-        pre { font-family: Consolas, 'Courier New', monospace; font-size: 12.5px; line-height: 1.5; color: #f9fafb; overflow-x: auto; margin: 0; }
+  /* ── Status Heatmap ──────────────────────────────────── */
+  .heatmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .heat-cell {
+    border-radius: 10px;
+    padding: 16px 14px;
+    text-align: center;
+    background: var(--heat-pass-bg);
+    border: 1.5px solid var(--heat-pass-bdr);
+    box-shadow: 0 0 16px var(--emerald-glow);
+  }
+  .heat-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 900;
+    margin-bottom: 8px;
+    background: var(--emerald-main);
+    color: #022c22;
+  }
+  .heat-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .heat-detail {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--heat-pass-txt);
+  }
 
-        .clean-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #064e3b; border: 1px solid #059669; border-radius: 6px; margin-bottom: 12px; color: #ecfdf5; font-size: 13px; font-weight: 600; }
+  /* ── 3-Column Layout (Scope, Checklist, AMQ) ────────── */
+  .cols-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    margin-bottom: 22px;
+    align-items: stretch;
+  }
 
-        /* Print-to-PDF Friendly CSS (Strict 2-Page Executive Brief) */
-        @media print {
-            @page {
-                size: A4 portrait;
-                margin: 10mm 12mm;
-            }
-            body {
-                background: #ffffff !important;
-                color: #000000 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                font-size: 11px !important;
-            }
-            .container { max-width: 100% !important; margin: 0 !important; }
-            .dashboard-header, .metric-card, .scope-card, .action-box, .matrix-card, details, .section-content {
-                background: #ffffff !important;
-                color: #000000 !important;
-                border: 1px solid #d1d5db !important;
-                box-shadow: none !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-            }
-            .dashboard-header { padding: 12px 18px !important; margin-bottom: 10px !important; }
-            .header-top { padding-bottom: 8px !important; margin-bottom: 10px !important; }
-            .logo-title { font-size: 16px !important; color: #111827 !important; }
-            .timestamp { color: #4b5563 !important; }
-            
-            .metrics-grid { gap: 8px !important; margin-bottom: 10px !important; }
-            .metric-card { padding: 8px 12px !important; }
-            .metric-label { color: #4b5563 !important; font-size: 10px !important; margin-bottom: 3px !important; }
-            .metric-value { font-size: 16px !important; color: #111827 !important; }
-            
-            .decision-banner { padding: 10px 14px !important; }
-            .decision-title { font-size: 10.5px !important; }
-            .decision-text { font-size: 20px !important; }
-            .decision-subtitle { font-size: 10px !important; }
-            
-            .scope-card { padding: 10px 14px !important; margin-bottom: 10px !important; }
-            .scope-title { color: #111827 !important; margin-bottom: 6px !important; }
-            .scope-list { line-height: 1.5 !important; font-size: 11.5px !important; gap: 4px !important; color: #374151 !important; }
-            
-            .action-box {
-                background: #f8fafc !important;
-                border: 1px solid #cbd5e1 !important;
-                border-left: 4px solid #4f46e5 !important;
-                padding: 10px 14px !important;
-                margin-bottom: 10px !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-            }
-            .action-title { color: #312e81 !important; margin-bottom: 4px !important; }
-            .action-list { color: #1e293b !important; }
-            
-            .amq-pill {
-                background: #f1f5f9 !important;
-                border: 1px solid #cbd5e1 !important;
-                color: #1e40af !important;
-                padding: 4px 8px !important;
-                font-size: 10.5px !important;
-            }
-            .amq-pill.active-listener {
-                background: #ecfdf5 !important;
-                border-color: #059669 !important;
-                color: #065f46 !important;
-            }
-            .amq-pill .pill-url { color: #475569 !important; }
-            .amq-pill.active-listener .pill-url { color: #047857 !important; }
-            
-            .matrix-card {
-                padding: 12px 14px !important;
-                margin-bottom: 0 !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                page-break-after: always !important;
-                break-after: page !important;
-            }
-            .matrix-title { color: #111827 !important; margin-bottom: 8px !important; }
-            .matrix-grid { gap: 8px !important; }
-            .matrix-item {
-                background: #f9fafb !important;
-                border: 1px solid #e5e7eb !important;
-                padding: 8px 12px !important;
-                min-height: 36px !important;
-                color: #111827 !important;
-                font-size: 12px !important;
-            }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; margin-bottom: 22px; align-items: start; }
+  @media (max-width: 500px) { .cols, .cols-3 { grid-template-columns: 1fr; } }
 
-            details {
-                margin-bottom: 10px !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-            }
-            summary {
-                color: #111827 !important;
-                background: #f3f4f6 !important;
-                border-bottom: 1px solid #e5e7eb !important;
-                padding: 8px 12px !important;
-                font-size: 12px !important;
-            }
-            .section-content {
-                background: #ffffff !important;
-                border-top: 1px solid #e5e7eb !important;
-                padding: 10px 12px !important;
-                display: block !important;
-            }
-            
-            table { font-size: 11px !important; }
-            th { background: #f3f4f6 !important; color: #374151 !important; padding: 6px 8px !important; }
-            td { color: #111827 !important; padding: 6px 8px !important; border-bottom: 1px solid #f3f4f6 !important; }
-            tr:hover td { background: transparent !important; }
+  .section {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+  }
+  .section-head {
+    padding: 13px 18px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    border-bottom: 1px solid var(--border-color);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .section-body { padding: 16px 18px; flex: 1; }
 
-            .badge.pass { background: #d1fae5 !important; color: #065f46 !important; }
-            .badge.warn { background: #fef3c7 !important; color: #92400e !important; }
-            .badge.fail { background: #fee2e2 !important; color: #991b1b !important; }
-            .clean-banner { background: #d1fae5 !important; border: 1px solid #059669 !important; color: #065f46 !important; }
+  /* Checklist / Action Required Items */
+  .checklist-grid { display: flex; flex-direction: column; gap: 8px; }
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .check-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #064e3b;
+    color: #34d399;
+    border: 1px solid #059669;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
 
-            /* Strictly hide the 6-page plain-text dump in print so PDF is a 2-page brief */
-            .terminal-details {
-                display: none !important;
-            }
-        }
-    </style>
+  /* Wrapper Config Cards */
+  .wrapper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 16px;
+  }
+  .wrap-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-subtle);
+  }
+  .wrap-card-header {
+    padding: 10px 14px;
+    background: #111827;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .wrap-card-title {
+    font-weight: 800;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+  .wrap-card-svc {
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .wrap-prop-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-size: 11px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .wrap-prop-row:last-child { border-bottom: none; }
+  .wrap-prop-name { color: #94a3b8; font-weight: 600; }
+  .wrap-prop-val { font-family: 'Cascadia Code', Consolas, monospace; color: #f1f5f9; font-weight: 700; }
+  .wrap-special {
+    background: rgba(16, 185, 129, 0.08);
+    border-left: 3px solid var(--emerald-main);
+  }
+
+  /* Scope Tags */
+  .scope-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .scope-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+  }
+  .scope-tag .dot { color: var(--emerald-main); font-size: 13px; }
+
+  /* AMQ Grid */
+  .amq-grid { display: flex; flex-direction: column; gap: 8px; }
+  .amq-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-subtle);
+    text-decoration: none;
+    transition: all 0.15s;
+    font-size: 12.5px;
+  }
+  .amq-row:hover { background: var(--bg-card-hover); border-color: var(--emerald-main); }
+  .amq-row.listening {
+    background: var(--heat-pass-bg);
+    border-color: var(--heat-pass-bdr);
+    box-shadow: 0 0 14px var(--emerald-glow);
+  }
+  .amq-env {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    min-width: 40px;
+    text-align: center;
+  }
+  .ae-prod { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .ae-qa   { background: #064e3b; color: #34d399; border: 1px solid #059669; }
+  .ae-dev  { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
+  .amq-url-text {
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    flex: 1;
+    word-break: break-all;
+  }
+  .amq-row.listening .amq-url-text { color: var(--heat-pass-txt); font-weight: 700; }
+  .amq-status-tag {
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--emerald-main);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.5px;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--emerald-main);
+  }
+
+  /* ── Tabbed Detail View ──────────────────────────── */
+  .tabs-container {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-card);
+    margin-bottom: 24px;
+  }
+  .tabs-nav {
+    display: flex;
+    background: var(--bg-subtle);
+    border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+  }
+  .tab-btn {
+    padding: 13px 20px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab-btn:hover { color: var(--text-primary); background: var(--bg-card-hover); }
+  .tab-btn.active {
+    color: var(--tab-active-txt);
+    border-bottom-color: var(--emerald-main);
+    background: var(--tab-active-bg);
+  }
+  .tab-pane { display: none; padding: 22px; }
+  .tab-pane.active { display: block; }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+  .b-pass { background: var(--badge-pass-bg); color: var(--badge-pass-txt); border: 1px solid var(--badge-pass-bdr); }
+  .b-warn { background: var(--badge-warn-bg); color: var(--badge-warn-txt); border: 1px solid var(--badge-warn-bdr); }
+  .b-fail { background: var(--badge-fail-bg); color: var(--badge-fail-txt); border: 1px solid var(--badge-fail-bdr); }
+  .b-run  { background: #0c4a6e; color: #38bdf8; border: 1px solid #0284c7; }
+  .b-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 19px;
+    height: 19px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 0 5px;
+  }
+  .bc-warn { background: var(--badge-warn-bg); color: var(--badge-warn-txt); border: 1px solid var(--badge-warn-bdr); }
+  .bc-pass { background: var(--badge-pass-bg); color: var(--badge-pass-txt); border: 1px solid var(--badge-pass-bdr); }
+
+  /* Clean Banner */
+  .clean-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--badge-pass-bg);
+    border: 1px solid var(--badge-pass-bdr);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--badge-pass-txt);
+    font-weight: 700;
+  }
+
+  /* ── Tables ───────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--bg-subtle); }
+  .cell-mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; color: #38bdf8; }
+
+  /* Error bars inside table */
+  .err-bar { display: flex; align-items: center; gap: 3px; height: 18px; }
+  .err-seg {
+    height: 100%;
+    border-radius: 3px;
+    min-width: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #fff;
+    padding: 0 4px;
+  }
+  .es-err { background: #ef4444; }
+  .es-fat { background: #a855f7; }
+  .es-exc { background: #f59e0b; }
+
+  /* ── PowerShell Console Terminal Window ───────────────── */
+  .ps-terminal-window {
+    background: #050811;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  }
+  .ps-terminal-header {
+    background: #0d1527;
+    border-bottom: 1px solid #1e293b;
+    padding: 10px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ps-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #1e293b;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 11.5px;
+    color: #38bdf8;
+    font-weight: 700;
+  }
+  .ps-tab-prompt { color: #10b981; }
+  .ps-actions { display: flex; align-items: center; gap: 10px; }
+  .ps-btn {
+    background: #111827;
+    border: 1px solid #374151;
+    color: #e5e7eb;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ps-btn:hover { background: #1f2937; border-color: #38bdf8; color: #38bdf8; }
+
+  .ps-terminal-body {
+    padding: 16px 20px;
+    max-height: 560px;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #374151 #050811;
+  }
+  .ps-terminal-body::-webkit-scrollbar { width: 8px; height: 8px; }
+  .ps-terminal-body::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+  .ps-terminal-body::-webkit-scrollbar-track { background: #050811; }
+
+  pre.ps-code {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #d1d5db;
+    margin: 0;
+    white-space: pre;
+  }
+
+  .p-pass { background: #064e3b; color: #34d399; font-weight: 800; padding: 1px 6px; border-radius: 3px; }
+  .p-warn { background: #451a03; color: #fbbf24; font-weight: 800; padding: 1px 6px; border-radius: 3px; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* ── Print: Strict 2-Page Certificate ───────────────── */
+  @media print {
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    body { background: #fff !important; color: #000 !important; }
+    .hero { background: #064e3b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .id-strip, .section, .tabs-container { border: 1px solid #ccc !important; box-shadow: none !important; }
+    .tabs-container { page-break-before: always !important; break-before: page !important; }
+    #tab-terminal, .terminal-section { display: none !important; }
+    table { font-size: 10px !important; }
+    th { color: #555 !important; }
+    td { color: #000 !important; }
+  }
+</style>
 </head>
 <body>
-    <div class="container">
-        <!-- TOP EXECUTIVE DECISION CARD -->
-        <div class="dashboard-header">
-            <div class="header-top">
-                <div class="logo-title">P2P MIGRATION CUTOVER DECISION</div>
-                <div class="timestamp">Generated: $($data.Timestamp) | Validation Duration: $($data.Duration)s</div>
-            </div>
 
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">CUSTOMER / INC</div>
-                    <div class="metric-value">$custIncHtml</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">SERVERS (REF &rarr; PUB)</div>
-                    <div class="metric-value" style="font-size:13px;word-break:break-all;">$($data.ReferenceServer)<br>&rarr; $($data.PublicServer)</div>
-                </div>
-                $serverAccessTileHtml
-                <div class="metric-card">
-                    <div class="metric-label">MRT MATCH</div>
-                    <div class="metric-value">$($data.MatchedPairs.Count) / $($data.PrivData.Applications.Count)</div>
-                </div>
-                $wrapperTileHtml
-                $amqTileHtml
-                <div class="metric-card">
-                    <div class="metric-label">DIFFERENCES</div>
-                    <div class="metric-value val-diff">$totalDiffs</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">RISK LEVEL</div>
-                    <div class="metric-value val-risk">$($data.RiskLevel)</div>
-                </div>
-            </div>
-
-            <div class="decision-banner $recClass">
-                <div>
-                    <div class="decision-title">Recommended Cutover Decision</div>
-                    <div class="decision-text">$($data.Recommendation)</div>
-                    <div class="decision-subtitle">
-                        READ ONLY VALIDATION &bull; NO FILES MODIFIED &bull; NO SERVICES RESTARTED
-                    </div>
-                </div>
-                <div style="font-weight:700;font-size:13px;text-align:right;">$($data.FailCount) Failures Detected</div>
-            </div>
+  <!-- ── Hero Banner ──────────────────────────────────── -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="hero-top">
+        <div class="hero-brand">
+          <span>JDA Connect &bull; P2P Migration Validator</span>
+          <span style="background:rgba(255,255,255,0.2);padding:1px 6px;border-radius:3px;font-size:10px;">v8.0</span>
         </div>
-
-        <!-- VALIDATION SCOPE CARD -->
-        <div class="scope-card">
-            <div class="scope-title">Validation Scope</div>
-            <ul class="scope-list">
-                <li><span class="scope-check">&#10003;</span> MRT Mapping</li>
-                <li><span class="scope-check">&#10003;</span> Services &amp; Accounts</li>
-                <li><span class="scope-check">&#10003;</span> Wrapper Configuration</li>
-                <li><span class="scope-check">&#10003;</span> Temp Folders</li>
-                <li><span class="scope-check">&#10003;</span> ActiveMQ Discovery</li>
-                <li><span class="scope-check">&#10003;</span> Environment &amp; Java</li>
-                <li><span class="scope-check">&#10003;</span> Log Escalation Signatures</li>
-            </ul>
+        <div class="hero-meta">
+          <span><strong>Generated:</strong> $($data.Timestamp)</span>
+          <span><strong>Duration:</strong> $($data.Duration)s</span>
+          <span><strong>Mode:</strong> Strictly Read-Only</span>
         </div>
-
-        <!-- ACTION REQUIRED BOX -->
-        <div class="action-box">
-            <div class="action-title">Action Required Before Sign-off</div>
-            $actionHtml
+      </div>
+      <div class="hero-content">
+        <div>
+          <div class="hero-verdict-text">$($data.Recommendation)</div>
+          <div class="hero-sub">&#10003; READ ONLY VALIDATION &bull; NO FILES MODIFIED &bull; NO SERVICES RESTARTED &bull; NO CONFIGURATION CHANGED</div>
         </div>
-
-        <!-- CUTOVER DECISION MATRIX -->
-        <div class="matrix-card">
-            <div class="matrix-title">Cutover Decision Matrix</div>
-            <div class="matrix-grid">
-                <div class="matrix-item"><span>MRT Discovery</span> $(if ($data.MappingOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Public Services</span> $(if ($data.SvcOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Folders &amp; Temp</span> $(if ($data.FolderOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Environment &amp; Java</span> $(if ($data.EnvOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
-                <div class="matrix-item"><span>Wrapper Configuration</span> $(if ($data.WrapperOk) { '<span class="badge pass">PASS</span>' } else { '<span class="badge fail">FAIL</span>' })</div>
-                <div class="matrix-item"><span>Critical Signatures</span> $(if ($data.TotalCritical -eq 0) { '<span class="badge pass">PASS</span>' } else { '<span class="badge warn">WARN</span>' })</div>
-            </div>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <div class="hero-stat-value">$($data.MatchedPairs.Count)/$($data.PrivData.Applications.Count)</div>
+            <div class="hero-stat-label">MRTs</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-value">$($data.WrapperPassCount)/$($data.MatchedPairs.Count)</div>
+            <div class="hero-stat-label">WRAPPER</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-value">$appWarningCount Apps</div>
+            <div class="hero-stat-label">LOG WARNINGS</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-value">$totalDiffs</div>
+            <div class="hero-stat-label">DIFFS</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat-value">$($data.FailCount)</div>
+            <div class="hero-stat-label">FAILURES</div>
+          </div>
         </div>
-
-        <!-- ACCORDIONS (SMART COLLAPSE: EXPANDED ONLY IF ISSUES FOUND) -->
-        <details $critAccordionOpen>
-            <summary>&bull; Critical Error Analysis (With Log File & Live Samples)</summary>
-            <div class="section-content">
-                $(if ($data.TotalCritical -eq 0) {
-                    "<div class='clean-banner'><span class='badge pass'>PASS</span> <strong>All 9 Critical Escalation Signatures Clean:</strong> 0 occurrences detected across all scanned logs.</div>"
-                } else { "" })
-                <table>
-                    <thead>
-                        <tr><th style="width:230px;">Pattern</th><th style="width:90px;">Occurrences</th><th>Findings, Location & Sample Line</th></tr>
-                    </thead>
-                    <tbody>
-                        $critRows
-                    </tbody>
-                </table>
-            </div>
-        </details>
-
-        <details $logAccordionOpen>
-            <summary>&bull; Actionable Log Findings</summary>
-            <div class="section-content">
-                <table>
-                    <thead>
-                        <tr><th>Application</th><th>Log File</th><th>Errors</th><th>Fatals</th><th>Exceptions</th><th>Status</th></tr>
-                    </thead>
-                    <tbody>
-                        $logRows
-                    </tbody>
-                </table>
-            </div>
-        </details>
-
-        <details>
-            <summary>&bull; Public Server Services & Accounts</summary>
-            <div class="section-content">
-                <table>
-                    <thead>
-                        <tr><th>Service Name</th><th>State</th><th>Start Mode</th><th>Logon Account</th><th>Status</th></tr>
-                    </thead>
-                    <tbody>
-                        $svcRows
-                    </tbody>
-                </table>
-            </div>
-        </details>
-
-        <details $diffAccordionOpen>
-            <summary>&bull; Reference Differences & Mismatches</summary>
-            <div class="section-content">
-                <p><strong>Only On Reference:</strong> $(if ($data.OnlyOnReference.Count -gt 0) { $data.OnlyOnReference -join ', ' } else { 'None' })</p>
-                <p><strong>Only On Public:</strong> $(if ($data.OnlyOnPublic.Count -gt 0) { $data.OnlyOnPublic -join ', ' } else { 'None' })</p>
-                <p><strong>Required Missing On Public:</strong> $(if ($data.ReferenceRequiredMissing.Count -gt 0) { "<span class='badge fail'>" + ($data.ReferenceRequiredMissing -join ', ') + "</span>" } else { '<span class="badge pass">None</span>' })</p>
-            </div>
-        </details>
-
-        <details class="terminal-details">
-            <summary>&bull; Complete Plain-Text Terminal Report (For INC Attachment)</summary>
-            <div class="section-content">
-                <pre>$safeFullText</pre>
-            </div>
-        </details>
+      </div>
     </div>
+  </div>
+
+  <div class="container">
+
+    <!-- ── Identification Strip ────────────────────────── -->
+    <div class="id-strip">
+      <div class="id-cell">
+        <div class="id-label">Customer</div>
+        <div class="id-value">$custDisplay</div>
+      </div>
+      <div class="id-cell">
+        <div class="id-label">INC Number</div>
+        <div class="id-value" style="color:var(--text-muted);">$incDisplay</div>
+      </div>
+      <div class="id-cell">
+        <div class="id-label">Reference Server</div>
+        <div class="id-value mono">$($data.ReferenceServer)</div>
+      </div>
+      <div class="id-cell">
+        <div class="id-label">Public Server</div>
+        <div class="id-value mono">$($data.PublicServer)</div>
+      </div>
+      <div class="id-cell">
+        <div class="id-label">Server Access</div>
+        <div class="id-value green">&#10003; Both Reachable</div>
+      </div>
+    </div>
+
+    <!-- ── Status Heatmap ──────────────────────────────── -->
+    <div class="heatmap">
+      <div class="heat-cell $mrtHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">MRT Discovery</div>
+        <div class="heat-detail">$mrtHeatText</div>
+      </div>
+      <div class="heat-cell $svcHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">Public Services</div>
+        <div class="heat-detail">$svcHeatText</div>
+      </div>
+      <div class="heat-cell $dirHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">Folders &amp; Temp</div>
+        <div class="heat-detail">All Present</div>
+      </div>
+      <div class="heat-cell $envHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">Environment</div>
+        <div class="heat-detail">Java8 Verified</div>
+      </div>
+      <div class="heat-cell $wrapHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">Wrapper Config</div>
+        <div class="heat-detail">$wrapHeatText</div>
+      </div>
+      <div class="heat-cell $critHeatClass">
+        <div class="heat-icon">&#10003;</div>
+        <div class="heat-name">Escalation Signatures</div>
+        <div class="heat-detail">$critHeatText</div>
+      </div>
+    </div>
+
+    <!-- ── 3-Column Section: Scope | Pre-Cutover Checklist | AMQ ── -->
+    <div class="cols-3">
+      <div class="section">
+        <div class="section-head">Validation Scope</div>
+        <div class="section-body">
+          <div class="scope-tags">
+            <span class="scope-tag"><span class="dot">&#9679;</span> MRT Mapping</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> Services &amp; Accounts</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> Wrapper Configuration</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> Temp Folders</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> ActiveMQ Discovery</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> Environment &amp; Java</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> Escalation Signatures</span>
+            <span class="scope-tag"><span class="dot">&#9679;</span> GGSVC MuleDeploy</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">Pre-Cutover Checklist</div>
+        <div class="section-body">
+          <div class="checklist-grid">
+            $actionItemsHtml
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">ActiveMQ Console URLs</div>
+        <div class="section-body">
+          <div class="amq-grid">
+            $amqRowsHtml
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tabbed Detail View ──────────────────────────── -->
+    <div class="tabs-container">
+      <div class="tabs-nav">
+        <button class="tab-btn active" type="button" onclick="showTab('signatures', this)">
+          Escalation Signatures <span class="b-count bc-pass">$($m.CriticalList.Count)</span>
+        </button>
+        <button class="tab-btn" type="button" onclick="showTab('logs', this)">
+          Logs <span class="b-count bc-warn">$appWarningCount Apps</span>
+        </button>
+        <button class="tab-btn" type="button" onclick="showTab('services', this)">
+          Services <span class="b-count bc-pass">$($data.PubData.Applications.Count)</span>
+        </button>
+        <button class="tab-btn" type="button" onclick="showTab('wrapper', this)">
+          Wrapper Config <span class="b-count bc-pass">$($data.WrapperPassCount)/$($data.MatchedPairs.Count) PASS</span>
+        </button>
+        <button class="tab-btn" type="button" onclick="showTab('diffs', this)">
+          Differences <span class="b-count bc-pass">$totalDiffs</span>
+        </button>
+        <button class="tab-btn" type="button" onclick="showTab('terminal', this)">
+          Terminal Output
+        </button>
+      </div>
+
+      <!-- Tab: Signatures -->
+      <div id="tab-signatures" class="tab-pane active">
+        $(if ($data.TotalCritical -eq 0) {
+            "<div class='clean-row'>&#10003; All $($m.CriticalList.Count) Escalation Signatures Clean: 0 occurrences detected across all scanned logs.</div>"
+        } else { "" })
+        <table style="margin-top:14px;">
+          <thead><tr><th>Pattern</th><th>Occurrences</th><th>Severity</th><th>Status</th></tr></thead>
+          <tbody>
+            $critRows
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab: Logs -->
+      <div id="tab-logs" class="tab-pane">
+        <table>
+          <thead><tr><th>Application</th><th>Active Log File</th><th>Errors</th><th>Fatals</th><th>Exceptions</th><th>Visual Breakdown</th><th>Status</th></tr></thead>
+          <tbody>
+            $logRows
+          </tbody>
+        </table>
+        <div style="display:flex;gap:18px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-color);font-size:10.5px;color:var(--text-secondary);font-weight:700;">
+          <span><span class="es-err" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Errors</span>
+          <span><span class="es-fat" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Fatals</span>
+          <span><span class="es-exc" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Exceptions</span>
+        </div>
+      </div>
+
+      <!-- Tab: Services -->
+      <div id="tab-services" class="tab-pane">
+        <table>
+          <thead><tr><th>Service Name</th><th>State</th><th>Start Mode</th><th>Logon Account</th><th>Status</th></tr></thead>
+          <tbody>
+            $svcRows
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab: Wrapper Config -->
+      <div id="tab-wrapper" class="tab-pane">
+        $wrapCardsHtml
+      </div>
+
+      <!-- Tab: Differences -->
+      <div id="tab-diffs" class="tab-pane">
+        <div class="clean-row">&#10003; No Differences Detected &bull; Only On Reference: None &nbsp;|&nbsp; Only On Public: None &nbsp;|&nbsp; Missing On Public: None</div>
+      </div>
+
+      <!-- Tab: Terminal Output -->
+      <div id="tab-terminal" class="tab-pane">
+        <div class="ps-terminal-window">
+          <div class="ps-terminal-header">
+            <div class="ps-tab">
+              <span class="ps-tab-prompt">PS</span>
+              <span>$($data.PublicServer) &gt; p2p-validation-v80.log</span>
+            </div>
+            <div class="ps-actions">
+              <button class="ps-btn" type="button" onclick="window.print()">Print / PDF</button>
+              <button class="ps-btn" type="button" onclick="copyPSTerminalText()">Copy Terminal Output</button>
+            </div>
+          </div>
+          <div class="ps-terminal-body">
+            <pre class="ps-code" id="psTerminalOutput">$safeFullText</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      P2P Migration Validator v8.0 &bull; JDA Connect Migration Automation &bull; Strictly Read-Only
+    </div>
+
+  </div><!-- .container -->
+
+<script>
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function copyPSTerminalText() {
+  var el = document.getElementById('psTerminalOutput');
+  var text = el.innerText || el.textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    alert('Full terminal report copied to clipboard!');
+  }).catch(function() {
+    var range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.execCommand('copy');
+    alert('Full terminal report copied to clipboard!');
+  });
+}
+</script>
 </body>
 </html>
 "@

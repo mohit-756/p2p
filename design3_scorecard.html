@@ -1,116 +1,214 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>P2P Cutover — Design 3 · Scorecard</title>
+<title>P2P Cutover — Design 3 · Scorecard (Dark Edition)</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root[data-theme="dark"] {
+    --bg-page: #0b0f19;
+    --bg-card: #111827;
+    --bg-subtle: #1e293b;
+    --bg-terminal: #070a12;
+    --border-color: #1f293d;
+    --border-subtle: #192231;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-green: #10b981;
+    --accent-green-glow: rgba(16, 185, 129, 0.2);
+    --accent-blue: #38bdf8;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --badge-pass-bg: #064e3b;
+    --badge-pass-txt: #34d399;
+    --badge-pass-bdr: #059669;
+    --badge-warn-bg: #451a03;
+    --badge-warn-txt: #fde68a;
+    --badge-warn-bdr: #b45309;
+    --badge-run-bg: #0c4a6e;
+    --badge-run-txt: #38bdf8;
+    --badge-run-bdr: #0284c7;
+    --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+  }
+
+  :root[data-theme="light"] {
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --bg-subtle: #f1f5f9;
+    --bg-terminal: #0f172a;
+    --border-color: #e2e8f0;
+    --border-subtle: #edf2f7;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --accent-green: #059669;
+    --accent-green-glow: rgba(5, 150, 105, 0.15);
+    --accent-blue: #0284c7;
+    --accent-amber: #d97706;
+    --accent-red: #dc2626;
+    --badge-pass-bg: #ecfdf5;
+    --badge-pass-txt: #047857;
+    --badge-pass-bdr: #a7f3d0;
+    --badge-warn-bg: #fffbeb;
+    --badge-warn-txt: #b45309;
+    --badge-warn-bdr: #fde68a;
+    --badge-run-bg: #eff6ff;
+    --badge-run-txt: #0369a1;
+    --badge-run-bdr: #bfdbfe;
+    --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.05);
+  }
+
   body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: #f5f5f4;
-    color: #1c1917;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
     min-height: 100vh;
+    transition: background 0.25s ease, color 0.25s ease;
   }
 
   /* ── Top Bar ─────────────────────────────────────────── */
   .topbar {
-    background: #1c1917;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
     padding: 14px 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 50;
   }
   .topbar-brand {
-    font-size: 13px;
-    font-weight: 700;
-    color: #fafaf9;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-primary);
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  .topbar-brand span { color: #a8a29e; font-weight: 400; margin-left: 6px; }
-  .topbar-meta { font-size: 11px; color: #a8a29e; display: flex; gap: 20px; }
-  .topbar-meta strong { color: #d6d3d1; }
+  .brand-badge {
+    background: var(--accent-blue);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .topbar-meta {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .topbar-meta strong { color: var(--text-primary); }
+
+  .theme-toggle-btn {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 11.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .theme-toggle-btn:hover {
+    border-color: var(--accent-blue);
+    transform: translateY(-1px);
+  }
 
   /* ── Layout ──────────────────────────────────────────── */
   .layout {
-    max-width: 1140px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 24px 24px 40px;
+    padding: 24px 24px 60px;
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 320px 1fr;
     gap: 24px;
   }
-  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
 
   /* ── LEFT SIDEBAR ────────────────────────────────────── */
-  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+  .sidebar { display: flex; flex-direction: column; gap: 18px; }
 
   /* Verdict Stamp */
   .stamp {
-    background: #fff;
-    border: 2px solid #16a34a;
+    background: var(--bg-card);
+    border: 1px solid var(--badge-pass-bdr);
     border-radius: 16px;
-    padding: 28px 24px;
+    padding: 26px 22px;
     text-align: center;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 0 30px var(--accent-green-glow);
   }
   .stamp::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 4px;
-    background: linear-gradient(90deg, #16a34a, #22c55e, #4ade80);
+    background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7);
   }
   .stamp-label {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: #78716c;
-    margin-bottom: 8px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
   }
   .stamp-verdict {
     font-size: 26px;
     font-weight: 900;
-    color: #15803d;
+    color: var(--accent-green);
     letter-spacing: -0.5px;
-    line-height: 1.1;
+    line-height: 1.15;
+    text-shadow: 0 0 16px var(--accent-green-glow);
   }
   .stamp-sub {
     font-size: 11px;
-    color: #78716c;
+    color: var(--text-secondary);
     margin-top: 10px;
     line-height: 1.5;
   }
   .stamp-badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 12px;
-    background: #f0fdf4;
-    color: #15803d;
+    gap: 6px;
+    margin-top: 14px;
+    background: var(--badge-pass-bg);
+    color: var(--badge-pass-txt);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 800;
     padding: 6px 16px;
     border-radius: 24px;
-    border: 1px solid #bbf7d0;
+    border: 1px solid var(--badge-pass-bdr);
   }
 
   /* Score Ring */
   .ring-card {
-    background: #fff;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 14px;
-    padding: 24px;
+    padding: 20px;
     text-align: center;
+    box-shadow: var(--shadow-card);
   }
   .ring-card-title {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #a8a29e;
+    color: var(--text-muted);
     margin-bottom: 16px;
   }
   .rings-row { display: flex; justify-content: space-around; }
@@ -120,146 +218,150 @@
     position: relative;
   }
   .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .ring-bg { fill: none; stroke: #f5f5f4; stroke-width: 6; }
-  .ring-fg { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
-  .ring-fg.green { stroke: #16a34a; }
-  .ring-fg.blue { stroke: #2563eb; }
-  .ring-fg.amber { stroke: #d97706; }
+  .ring-bg { fill: none; stroke: var(--bg-subtle); stroke-width: 6; }
+  .ring-fg { fill: none; stroke-width: 6; stroke-linecap: round; }
+  .ring-fg.green { stroke: var(--accent-green); filter: drop-shadow(0 0 4px var(--accent-green)); }
+  .ring-fg.blue { stroke: var(--accent-blue); filter: drop-shadow(0 0 4px var(--accent-blue)); }
   .ring-label {
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 16px;
-    font-weight: 800;
-    color: #1c1917;
+    font-size: 15px;
+    font-weight: 900;
+    color: var(--text-primary);
   }
-  .ring-name { font-size: 11px; font-weight: 600; color: #57534e; }
+  .ring-name { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
 
   /* Info List */
   .info-card {
-    background: #fff;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 14px;
-    padding: 20px 22px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow-card);
   }
   .info-card-title {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #a8a29e;
-    margin-bottom: 14px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #f5f5f4;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
-    font-size: 13px;
-    border-bottom: 1px solid #fafaf9;
+    padding: 7px 0;
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .info-row:last-child { border-bottom: none; }
-  .info-key { color: #78716c; font-weight: 500; }
-  .info-val { font-weight: 700; color: #1c1917; text-align: right; }
-  .info-val.green { color: #15803d; }
-  .info-val.mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; }
+  .info-key { color: var(--text-secondary); font-weight: 600; }
+  .info-val { font-weight: 700; color: var(--text-primary); text-align: right; }
+  .info-val.green { color: var(--accent-green); }
+  .info-val.mono { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11.5px; }
 
   /* AMQ Links */
   .amq-link {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 12px;
+    padding: 9px 12px;
     margin-top: 6px;
-    background: #fafaf9;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     text-decoration: none;
     font-size: 11.5px;
     font-family: 'Cascadia Code', Consolas, monospace;
-    color: #57534e;
+    color: var(--text-secondary);
     transition: all 0.15s;
   }
-  .amq-link:hover { background: #f5f5f4; border-color: #d6d3d1; }
-  .amq-link.active {
-    background: #f0fdf4;
-    border-color: #86efac;
-    color: #15803d;
+  .amq-link:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
   }
-  .amq-link.active:hover { background: #dcfce7; }
+  .amq-link.active {
+    background: var(--badge-pass-bg);
+    border-color: var(--badge-pass-bdr);
+    color: var(--badge-pass-txt);
+    box-shadow: 0 0 12px var(--accent-green-glow);
+  }
   .env-label {
     font-family: 'Segoe UI', sans-serif;
     font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.5px;
     padding: 2px 6px;
-    border-radius: 3px;
-    min-width: 32px;
+    border-radius: 4px;
+    min-width: 36px;
     text-align: center;
   }
-  .el-prod { background: #fef2f2; color: #dc2626; }
-  .el-qa   { background: #f0fdf4; color: #16a34a; }
-  .el-dev  { background: #eff6ff; color: #2563eb; }
-  .listening-dot { font-size: 8px; color: #16a34a; animation: pulse 2s infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .el-prod { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .el-qa   { background: #064e3b; color: #34d399; border: 1px solid #059669; }
+  .el-dev  { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
+  .listening-dot { font-size: 9px; color: var(--accent-green); animation: pulse 1.8s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.9); } }
 
   /* ── RIGHT MAIN CONTENT ──────────────────────────────── */
-  .main { display: flex; flex-direction: column; gap: 16px; }
+  .main { display: flex; flex-direction: column; gap: 18px; }
 
-  /* Checklist Bar */
+  /* Validation Scope Chips */
   .check-bar {
-    background: #fff;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 14px;
-    padding: 18px 22px;
+    padding: 16px 20px;
+    box-shadow: var(--shadow-card);
   }
   .check-bar-title {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #a8a29e;
-    margin-bottom: 12px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
   }
   .check-items { display: flex; flex-wrap: wrap; gap: 8px; }
   .check-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
+    padding: 5px 12px;
+    background: var(--badge-pass-bg);
+    border: 1px solid var(--badge-pass-bdr);
     border-radius: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #15803d;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--badge-pass-txt);
   }
-  .check-chip .ico { font-size: 13px; }
 
-  /* Validation Steps (Horizontal Pipeline) */
+  /* Validation Pipeline (Horizontal Nodes) */
   .pipeline {
-    background: #fff;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 14px;
     padding: 20px 22px;
+    box-shadow: var(--shadow-card);
   }
   .pipeline-title {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #a8a29e;
+    color: var(--text-muted);
     margin-bottom: 16px;
   }
   .pipeline-steps {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 0;
     position: relative;
   }
-  @media (max-width: 700px) { .pipeline-steps { grid-template-columns: repeat(3, 1fr); gap: 8px; } }
+  @media (max-width: 768px) { .pipeline-steps { grid-template-columns: repeat(3, 1fr); gap: 14px 0; } }
   .step {
     display: flex;
     flex-direction: column;
@@ -275,7 +377,7 @@
     left: calc(50% + 20px);
     width: calc(100% - 40px);
     height: 2px;
-    background: #bbf7d0;
+    background: var(--badge-pass-bdr);
   }
   .step-dot {
     width: 36px;
@@ -285,24 +387,23 @@
     align-items: center;
     justify-content: center;
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 800;
     margin-bottom: 8px;
     position: relative;
     z-index: 1;
+    box-shadow: 0 0 12px var(--accent-green-glow);
   }
-  .step-dot.pass { background: #16a34a; color: #fff; }
-  .step-dot.warn { background: #f59e0b; color: #fff; }
-  .step-dot.fail { background: #dc2626; color: #fff; }
-  .step-name { font-size: 10.5px; font-weight: 600; color: #57534e; line-height: 1.3; }
-  .step-result { font-size: 10px; font-weight: 700; color: #15803d; margin-top: 3px; }
-  .step-result.warn-text { color: #b45309; }
+  .step-dot.pass { background: var(--accent-green); color: #022c22; }
+  .step-name { font-size: 10.5px; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
+  .step-result { font-size: 10px; font-weight: 800; color: var(--accent-green); margin-top: 3px; }
 
-  /* ── Section Panels ──────────────────────────────────── */
+  /* ── Section Panels (Accordions) ─────────────────────── */
   .panel {
-    background: #fff;
-    border: 1px solid #e7e5e4;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 14px;
     overflow: hidden;
+    box-shadow: var(--shadow-card);
   }
   .panel-header {
     display: flex;
@@ -312,14 +413,15 @@
     cursor: pointer;
     user-select: none;
     border-bottom: 1px solid transparent;
-    transition: background 0.1s;
+    transition: background 0.15s;
+    background: var(--bg-card);
   }
-  .panel-header:hover { background: #fafaf9; }
-  details[open] > .panel-header { border-bottom-color: #f5f5f4; background: #fafaf9; }
-  .panel-title { font-size: 13px; font-weight: 700; color: #292524; display: flex; align-items: center; gap: 10px; }
-  .panel-toggle { font-size: 14px; color: #a8a29e; transition: transform 0.2s; }
+  .panel-header:hover { background: var(--bg-subtle); }
+  details[open] > .panel-header { border-bottom-color: var(--border-color); background: var(--bg-subtle); }
+  .panel-title { font-size: 13px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 10px; }
+  .panel-toggle { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; }
   details[open] .panel-toggle { transform: rotate(180deg); }
-  .panel-body { padding: 16px 22px; }
+  .panel-body { padding: 18px 22px; }
   details summary { list-style: none; }
   details summary::-webkit-details-marker { display: none; }
 
@@ -329,118 +431,214 @@
     align-items: center;
     gap: 10px;
     padding: 12px 16px;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
+    background: var(--badge-pass-bg);
+    border: 1px solid var(--badge-pass-bdr);
     border-radius: 10px;
-    font-size: 13px;
-    color: #15803d;
-    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--badge-pass-txt);
+    font-weight: 700;
     margin-bottom: 12px;
   }
 
   /* Log Bars */
   .log-item {
     display: grid;
-    grid-template-columns: 160px 160px 1fr 60px;
+    grid-template-columns: 160px 180px 1fr 65px;
     align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #fafaf9;
-    font-size: 12.5px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 12px;
     gap: 8px;
   }
   .log-item:last-child { border-bottom: none; }
-  .log-app { font-weight: 600; color: #292524; }
-  .log-file { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; color: #78716c; }
+  .log-app { font-weight: 700; color: var(--text-primary); }
+  .log-file { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; color: var(--accent-blue); }
   .log-bars { display: flex; gap: 4px; align-items: center; }
   .bar-segment {
     height: 20px;
-    border-radius: 3px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 9.5px;
-    font-weight: 700;
+    font-weight: 800;
     color: #fff;
-    min-width: 28px;
+    min-width: 26px;
     padding: 0 4px;
   }
   .bar-err { background: #ef4444; }
-  .bar-fat { background: #7c3aed; }
+  .bar-fat { background: #a855f7; }
   .bar-exc { background: #f59e0b; }
-  .bar-zero { background: #e7e5e4; color: #a8a29e; }
+  .bar-zero { background: var(--bg-subtle); color: var(--text-muted); }
 
   /* Badges */
   .badge {
     display: inline-block;
-    padding: 3px 10px;
+    padding: 3px 9px;
     border-radius: 20px;
-    font-size: 10.5px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
     letter-spacing: 0.3px;
+    text-align: center;
   }
-  .b-pass { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-  .b-warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-  .b-fail { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-  .b-run  { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+  .b-pass { background: var(--badge-pass-bg); color: var(--badge-pass-txt); border: 1px solid var(--badge-pass-bdr); }
+  .b-warn { background: var(--badge-warn-bg); color: var(--badge-warn-txt); border: 1px solid var(--badge-warn-bdr); }
+  .b-run  { background: var(--badge-run-bg);  color: var(--badge-run-txt);  border: 1px solid var(--badge-run-bdr); }
 
-  /* Services Table */
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th {
     text-align: left;
-    padding: 8px 10px;
+    padding: 9px 12px;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    color: #a8a29e;
-    border-bottom: 2px solid #f5f5f4;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
   }
-  td { padding: 10px; border-bottom: 1px solid #fafaf9; color: #44403c; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #fafaf9; }
+  tr:hover td { background: var(--bg-subtle); }
+  .mono-cell { font-family: 'Cascadia Code', Consolas, monospace; font-size: 11px; }
 
-  /* Terminal (screen only) */
-  .terminal-section { margin-top: 4px; }
-  pre {
+  /* ── DESIGN 3 EXCLUSIVE: VS Code / IDE Style Terminal Window ──── */
+  .ide-terminal-window {
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  }
+  .ide-window-bar {
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ide-window-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .mac-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mac-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+  }
+  .dot-red { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; }
+  .dot-green { background: #10b981; }
+  .ide-window-title {
     font-family: 'Cascadia Code', Consolas, monospace;
     font-size: 11.5px;
-    line-height: 1.6;
-    color: #57534e;
-    background: #fafaf9;
-    padding: 16px;
-    border-radius: 8px;
+    font-weight: 700;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ide-tab-active {
+    background: #1e293b;
+    color: #38bdf8;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+  }
+  .ide-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ide-copy-btn {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ide-copy-btn:hover {
+    background: #334155;
+    border-color: #38bdf8;
+    color: #38bdf8;
+  }
+  .ide-terminal-body {
+    padding: 16px 20px;
     overflow-x: auto;
-    border: 1px solid #e7e5e4;
+    max-height: 550px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #090d16;
+  }
+  .ide-terminal-body::-webkit-scrollbar { width: 8px; height: 8px; }
+  .ide-terminal-body::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  .ide-terminal-body::-webkit-scrollbar-track { background: #090d16; }
+
+  pre.ide-code {
+    font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #cbd5e1;
+    margin: 0;
+    white-space: pre;
   }
 
-  /* ── Print ───────────────────────────────────────────── */
+  /* Syntax Highlighting inside IDE Terminal */
+  .t-header { color: #38bdf8; font-weight: 800; }
+  .t-pass   { background: #064e3b; color: #34d399; font-weight: 800; padding: 1px 5px; border-radius: 3px; }
+  .t-warn   { background: #451a03; color: #fbbf24; font-weight: 800; padding: 1px 5px; border-radius: 3px; }
+  .t-key    { color: #94a3b8; }
+  .t-val    { color: #f8fafc; font-weight: 700; }
+  .t-url    { color: #60a5fa; text-decoration: underline; }
+
+  /* ── Print: Strict 2-Page Certificate ───────────────── */
   @media print {
     @page { size: A4 portrait; margin: 10mm 12mm; }
-    body { background: #fff !important; }
-    .topbar { background: #292524 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .layout { grid-template-columns: 280px 1fr !important; gap: 16px !important; padding: 16px !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .topbar { background: #fff !important; border-bottom: 2px solid #000 !important; }
+    .theme-toggle-btn { display: none !important; }
+    .layout { grid-template-columns: 280px 1fr !important; gap: 16px !important; padding: 10px !important; }
     .stamp, .ring-card, .info-card, .check-bar, .pipeline, .panel { 
-      box-shadow: none !important; break-inside: avoid !important; border: 1px solid #e7e5e4 !important;
+      box-shadow: none !important; break-inside: avoid !important; border: 1px solid #ccc !important; background: #fff !important; color: #000 !important;
     }
-    .stamp { border: 2px solid #16a34a !important; }
+    .stamp { border: 2px solid #059669 !important; }
     .terminal-section { display: none !important; }
     .tech-break { page-break-before: always !important; break-before: page !important; }
     .amq-link { break-inside: avoid !important; }
-    .bar-err, .bar-fat, .bar-exc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .step-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 1; } }
+    table { font-size: 10px !important; }
+    th { color: #555 !important; }
+    td { color: #000 !important; }
   }
 </style>
 </head>
 <body>
 
-  <!-- ── Top Bar ──────────────────────────────────────── -->
+  <!-- ── Sticky Top Bar with Theme Toggle ─────────────── -->
   <div class="topbar">
-    <div class="topbar-brand">P2P Migration Validator <span>v8.0</span></div>
+    <div class="topbar-brand">
+      <span>P2P Migration Validator</span>
+      <span class="brand-badge">v8.0</span>
+    </div>
     <div class="topbar-meta">
+      <span><strong>Client:</strong> ikea</span>
       <span><strong>Generated:</strong> 2026-11-17 11:33:58</span>
       <span><strong>Duration:</strong> 15.37s</span>
       <span><strong>Mode:</strong> Read-Only</span>
+      <button class="theme-toggle-btn" onclick="toggleTheme()" id="themeBtn">☀️ Light Mode</button>
     </div>
   </div>
 
@@ -453,31 +651,29 @@
       <div class="stamp">
         <div class="stamp-label">Cutover Decision</div>
         <div class="stamp-verdict">READY FOR<br>CUTOVER</div>
-        <div class="stamp-sub">0 files modified · 0 services restarted</div>
-        <div class="stamp-badge">✓ 0 Failures · Risk LOW</div>
+        <div class="stamp-sub">0 files modified &bull; 0 services restarted</div>
+        <div class="stamp-badge">&#10003; 0 Failures Detected &bull; Risk LOW</div>
       </div>
 
       <!-- Score Rings -->
       <div class="ring-card">
-        <div class="ring-card-title">Validation Scores</div>
+        <div class="ring-card-title">Readiness Validation Scores</div>
         <div class="rings-row">
           <div class="ring-wrap">
             <div class="ring">
               <svg viewBox="0 0 36 36">
                 <circle class="ring-bg" cx="18" cy="18" r="15.9"/>
-                <circle class="ring-fg green" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100" stroke-dashoffset="0"/>
+                <circle class="ring-fg green" cx="18" cy="18" r="15.9" stroke-dasharray="100" stroke-dashoffset="0"/>
               </svg>
               <div class="ring-label">6/6</div>
             </div>
-            <div class="ring-name">MRT</div>
+            <div class="ring-name">MRTs</div>
           </div>
           <div class="ring-wrap">
             <div class="ring">
               <svg viewBox="0 0 36 36">
                 <circle class="ring-bg" cx="18" cy="18" r="15.9"/>
-                <circle class="ring-fg green" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100" stroke-dashoffset="0"/>
+                <circle class="ring-fg green" cx="18" cy="18" r="15.9" stroke-dasharray="100" stroke-dashoffset="0"/>
               </svg>
               <div class="ring-label">6/6</div>
             </div>
@@ -487,8 +683,7 @@
             <div class="ring">
               <svg viewBox="0 0 36 36">
                 <circle class="ring-bg" cx="18" cy="18" r="15.9"/>
-                <circle class="ring-fg green" cx="18" cy="18" r="15.9"
-                  stroke-dasharray="100" stroke-dashoffset="0"/>
+                <circle class="ring-fg blue" cx="18" cy="18" r="15.9" stroke-dasharray="100" stroke-dashoffset="0"/>
               </svg>
               <div class="ring-label">0</div>
             </div>
@@ -499,53 +694,53 @@
 
       <!-- Quick Facts -->
       <div class="info-card">
-        <div class="info-card-title">Quick Facts</div>
+        <div class="info-card-title">Cutover Target Environment</div>
         <div class="info-row">
           <span class="info-key">Customer</span>
           <span class="info-val">ikea</span>
         </div>
         <div class="info-row">
-          <span class="info-key">INC</span>
-          <span class="info-val" style="color:#a8a29e;">N/A</span>
+          <span class="info-key">INC Number</span>
+          <span class="info-val" style="color:var(--text-muted);">N/A (Optional)</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Reference</span>
+          <span class="info-key">Reference Server</span>
           <span class="info-val mono">tsbi631702001</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Public</span>
+          <span class="info-key">Public Server</span>
           <span class="info-val mono">tsbi631702003</span>
         </div>
         <div class="info-row">
           <span class="info-key">Server Access</span>
-          <span class="info-val green">✓ Both Reachable</span>
+          <span class="info-val green">&#10003; Both Reachable</span>
         </div>
         <div class="info-row">
           <span class="info-key">ActiveMQ</span>
           <span class="info-val green">Installed</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Risk Level</span>
+          <span class="info-key">Risk Evaluation</span>
           <span class="info-val green">LOW</span>
         </div>
       </div>
 
       <!-- AMQ Console Links -->
       <div class="info-card">
-        <div class="info-card-title">ActiveMQ Console</div>
+        <div class="info-card-title">ActiveMQ Console Verification</div>
         <a href="http://tsbi631702003:11080/index.html" target="_blank" class="amq-link">
           <span class="env-label el-prod">PROD</span>
-          <span>:11080</span>
+          <span>tsbi631702003:11080</span>
         </a>
         <a href="http://tsbi631702003:31080/index.html" target="_blank" class="amq-link active">
           <span class="env-label el-qa">QA</span>
-          <span class="listening-dot">●</span>
-          <span>:31080</span>
-          <span style="font-family:'Segoe UI',sans-serif;font-size:9px;font-weight:700;color:#16a34a;margin-left:auto;">LISTENING</span>
+          <span class="listening-dot">&#9679;</span>
+          <span>tsbi631702003:31080</span>
+          <span style="font-family:'Segoe UI',sans-serif;font-size:9px;font-weight:800;color:var(--accent-green);margin-left:auto;">LISTENING</span>
         </a>
         <a href="http://tsbi631702003:51080/index.html" target="_blank" class="amq-link">
           <span class="env-label el-dev">DEV</span>
-          <span>:51080</span>
+          <span>tsbi631702003:51080</span>
         </a>
       </div>
 
@@ -556,51 +751,51 @@
 
       <!-- Scope Chips -->
       <div class="check-bar">
-        <div class="check-bar-title">Validation Scope</div>
+        <div class="check-bar-title">Unified Validation Scope</div>
         <div class="check-items">
-          <span class="check-chip"><span class="ico">✓</span> MRT Mapping</span>
-          <span class="check-chip"><span class="ico">✓</span> Services &amp; Accounts</span>
-          <span class="check-chip"><span class="ico">✓</span> Wrapper Config</span>
-          <span class="check-chip"><span class="ico">✓</span> Temp Folders</span>
-          <span class="check-chip"><span class="ico">✓</span> ActiveMQ</span>
-          <span class="check-chip"><span class="ico">✓</span> Environment &amp; Java</span>
-          <span class="check-chip"><span class="ico">✓</span> Log Signatures</span>
+          <span class="check-chip">&#10003; MRT Mapping</span>
+          <span class="check-chip">&#10003; Services &amp; Accounts</span>
+          <span class="check-chip">&#10003; Wrapper Configuration</span>
+          <span class="check-chip">&#10003; Temp Folders</span>
+          <span class="check-chip">&#10003; ActiveMQ Discovery</span>
+          <span class="check-chip">&#10003; Environment &amp; Java</span>
+          <span class="check-chip">&#10003; Critical Log Signatures</span>
         </div>
       </div>
 
       <!-- Validation Pipeline -->
       <div class="pipeline">
-        <div class="pipeline-title">Validation Pipeline</div>
+        <div class="pipeline-title">Cutover Decision Matrix Pipeline</div>
         <div class="pipeline-steps">
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">MRT<br>Discovery</div>
-            <div class="step-result">6/6</div>
+            <div class="step-result">6/6 Matched</div>
           </div>
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">Public<br>Services</div>
-            <div class="step-result">6/6</div>
+            <div class="step-result">6/6 Running</div>
           </div>
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">Folders<br>&amp; Temp</div>
-            <div class="step-result">PASS</div>
+            <div class="step-result">All Present</div>
           </div>
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">Environment<br>&amp; Java</div>
-            <div class="step-result">PASS</div>
+            <div class="step-result">Java8 OK</div>
           </div>
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">Wrapper<br>Config</div>
-            <div class="step-result">6/6</div>
+            <div class="step-result">6/6 PASS</div>
           </div>
           <div class="step">
-            <div class="step-dot pass">✓</div>
+            <div class="step-dot pass">&#10003;</div>
             <div class="step-name">Critical<br>Signatures</div>
-            <div class="step-result">0 found</div>
+            <div class="step-result">0 Found</div>
           </div>
         </div>
       </div>
@@ -611,23 +806,23 @@
         <!-- Critical Signatures -->
         <details class="panel">
           <summary class="panel-header">
-            <span class="panel-title"><span class="badge b-pass">PASS</span> Critical Error Signatures</span>
-            <span class="panel-toggle">▼</span>
+            <span class="panel-title"><span class="badge b-pass">PASS</span> Critical Error Signatures Analysis (9 Core Checks)</span>
+            <span class="panel-toggle">&#9660;</span>
           </summary>
           <div class="panel-body">
-            <div class="all-clear">✓ All 9 Critical Signatures Clean — 0 occurrences across all active logs</div>
+            <div class="all-clear">&#10003; All 9 Critical Signatures Clean — 0 occurrences detected across all scanned active logs.</div>
             <table>
-              <thead><tr><th>Pattern</th><th>Occurrences</th><th>Status</th></tr></thead>
+              <thead><tr><th>Pattern</th><th>Occurrences</th><th>Severity</th><th>Status</th></tr></thead>
               <tbody>
-                <tr><td>OutOfMemoryError</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>BindException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>AccessDeniedException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>UnknownHostException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>ConnectException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>SSLException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>ORA-</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>Permission denied</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>FileNotFoundException</td><td>0</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">OutOfMemoryError</td><td>0</td><td>CRITICAL</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">BindException</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">AccessDeniedException</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">UnknownHostException</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">ConnectException</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">SSLException</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">ORA-</td><td>0</td><td>CRITICAL</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">Permission denied</td><td>0</td><td>HIGH</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td class="mono-cell">FileNotFoundException</td><td>0</td><td>MEDIUM</td><td><span class="badge b-pass">PASS</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -636,18 +831,18 @@
         <!-- Log Findings — Visual Bars -->
         <details class="panel" open>
           <summary class="panel-header">
-            <span class="panel-title"><span class="badge b-warn">WARN</span> Log Findings — 6 Applications</span>
-            <span class="panel-toggle">▼</span>
+            <span class="panel-title"><span class="badge b-warn">WARN</span> Actionable Log Findings (6 Applications With Log Warnings)</span>
+            <span class="panel-toggle">&#9660;</span>
           </summary>
           <div class="panel-body">
-            <div class="log-item" style="border-bottom: 2px solid #f5f5f4; padding-bottom: 6px; margin-bottom: 4px;">
-              <span style="font-size:10px;font-weight:700;color:#a8a29e;text-transform:uppercase;letter-spacing:0.5px;">Application</span>
-              <span style="font-size:10px;font-weight:700;color:#a8a29e;text-transform:uppercase;letter-spacing:0.5px;">Log File</span>
-              <span style="font-size:10px;font-weight:700;color:#a8a29e;text-transform:uppercase;letter-spacing:0.5px;">Errors · Fatals · Exceptions</span>
-              <span style="font-size:10px;font-weight:700;color:#a8a29e;text-transform:uppercase;letter-spacing:0.5px;">Status</span>
+            <div class="log-item" style="border-bottom: 2px solid var(--border-color); padding-bottom: 8px; margin-bottom: 6px;">
+              <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;">Application</span>
+              <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;">Active Log File</span>
+              <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;">Errors &bull; Fatals &bull; Exceptions</span>
+              <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;">Status</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGMST</span>
+              <span class="log-app">JDAConnect-GGMST</span>
               <span class="log-file">mule_ee_ggmst.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:36px;">36</span>
@@ -657,7 +852,7 @@
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-E</span>
+              <span class="log-app">JDAConnect-GGPRI-E</span>
               <span class="log-file">mule_ee_ggpri-e.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:35px;">35</span>
@@ -667,17 +862,17 @@
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-E</span>
+              <span class="log-app">JDAConnect-GGPRI-E</span>
               <span class="log-file">jda-ion-eapi.log</span>
               <div class="log-bars">
-                <span class="bar-segment bar-err" style="width:28px;">5</span>
+                <span class="bar-segment bar-err" style="width:26px;">5</span>
                 <span class="bar-segment bar-zero" style="width:24px;">0</span>
                 <span class="bar-segment bar-zero" style="width:24px;">0</span>
               </div>
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-P</span>
+              <span class="log-app">JDAConnect-GGPRI-P</span>
               <span class="log-file">mule_ee_ggpri-p.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:28px;">8</span>
@@ -687,7 +882,7 @@
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-S</span>
+              <span class="log-app">JDAConnect-GGPRI-S</span>
               <span class="log-file">jda-fso-sapi-hr.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:28px;">15</span>
@@ -697,37 +892,37 @@
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-S</span>
+              <span class="log-app">JDAConnect-GGPRI-S</span>
               <span class="log-file">jda-fso-sapi-hr-10.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:28px;">13</span>
                 <span class="bar-segment bar-zero" style="width:24px;">0</span>
-                <span class="bar-segment bar-exc" style="width:28px;">27</span>
+                <span class="bar-segment bar-exc" style="width:32px;">27</span>
               </div>
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-SCPO</span>
+              <span class="log-app">JDAConnect-GGPRI-SCPO</span>
               <span class="log-file">mule_ee_ggpri-scpo.log</span>
               <div class="log-bars">
-                <span class="bar-segment bar-err" style="width:28px;">7</span>
+                <span class="bar-segment bar-err" style="width:26px;">7</span>
                 <span class="bar-segment bar-zero" style="width:24px;">0</span>
                 <span class="bar-segment bar-zero" style="width:24px;">2</span>
               </div>
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGPRI-SCPO</span>
+              <span class="log-app">JDAConnect-GGPRI-SCPO</span>
               <span class="log-file">jda-ikea-scpo-adapter.log</span>
               <div class="log-bars">
-                <span class="bar-segment bar-err" style="width:28px;">7</span>
+                <span class="bar-segment bar-err" style="width:26px;">7</span>
                 <span class="bar-segment bar-zero" style="width:24px;">0</span>
                 <span class="bar-segment bar-exc" style="width:28px;">20</span>
               </div>
               <span class="badge b-warn">WARN</span>
             </div>
             <div class="log-item">
-              <span class="log-app">GGSVC</span>
+              <span class="log-app">JDAConnect-GGSVC</span>
               <span class="log-file">mule_ee_ggsvc.log</span>
               <div class="log-bars">
                 <span class="bar-segment bar-err" style="width:37px;">37</span>
@@ -736,7 +931,7 @@
               </div>
               <span class="badge b-warn">WARN</span>
             </div>
-            <div style="display:flex;gap:16px;margin-top:12px;font-size:10px;color:#78716c;font-weight:600;">
+            <div style="display:flex;gap:18px;margin-top:14px;font-size:10.5px;color:var(--text-secondary);font-weight:700;">
               <span><span class="bar-segment bar-err" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Errors</span>
               <span><span class="bar-segment bar-fat" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Fatals</span>
               <span><span class="bar-segment bar-exc" style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;"></span> Exceptions</span>
@@ -747,19 +942,19 @@
         <!-- Services -->
         <details class="panel">
           <summary class="panel-header">
-            <span class="panel-title"><span class="badge b-pass">PASS</span> Public Services &amp; Accounts</span>
-            <span class="panel-toggle">▼</span>
+            <span class="panel-title"><span class="badge b-pass">PASS</span> Public Services &amp; Accounts Validation</span>
+            <span class="panel-toggle">&#9660;</span>
           </summary>
           <div class="panel-body">
             <table>
-              <thead><tr><th>Service</th><th>State</th><th>Start Mode</th><th>Logon Account</th><th>Status</th></tr></thead>
+              <thead><tr><th>Service Name</th><th>State</th><th>Start Mode</th><th>Logon Account</th><th>Status</th></tr></thead>
               <tbody>
-                <tr><td>mule_ee_ggmst</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>mule_ee_ggpri-e</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>mule_ee_ggpri-p</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>mule_ee_ggpri-s</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>mule_ee_ggpri-scpo</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
-                <tr><td>mule_ee_ggsvc</td><td><span class="badge b-run">Running</span></td><td>Auto</td><td style="font-family:Consolas,monospace;font-size:11px;">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggmst</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggpri-e</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggpri-p</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggpri-s</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggpri-scpo</td><td><span class="badge b-run">Running</span></td><td>Delayed Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
+                <tr><td>mule_ee_ggsvc</td><td><span class="badge b-run">Running</span></td><td>Auto</td><td class="mono-cell">JDADELIVERS\bi63ts17$</td><td><span class="badge b-pass">PASS</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -768,31 +963,308 @@
         <!-- Differences -->
         <details class="panel">
           <summary class="panel-header">
-            <span class="panel-title"><span class="badge b-pass">PASS</span> Reference Differences</span>
-            <span class="panel-toggle">▼</span>
+            <span class="panel-title"><span class="badge b-pass">PASS</span> Reference Differences &amp; Mismatches</span>
+            <span class="panel-toggle">&#9660;</span>
           </summary>
           <div class="panel-body">
-            <div class="all-clear">✓ No Differences — Only On Reference: None &nbsp;·&nbsp; Only On Public: None &nbsp;·&nbsp; Missing On Public: None</div>
+            <div class="all-clear">&#10003; No Differences Detected &bull; Only On Reference: None &nbsp;|&nbsp; Only On Public: None &nbsp;|&nbsp; Missing On Public: None</div>
           </div>
         </details>
 
-        <!-- Terminal -->
-        <details class="panel terminal-section">
+        <!-- ── FULL REAL TERMINAL OUTPUT (IDE Terminal Edition) ───────── -->
+        <details class="panel terminal-section" open>
           <summary class="panel-header">
-            <span class="panel-title">Complete Plain-Text Report</span>
-            <span class="panel-toggle">▼</span>
+            <span class="panel-title">&#128187; Complete Plain-Text Terminal Report (IDE Console View)</span>
+            <span class="panel-toggle">&#9660;</span>
           </summary>
-          <div class="panel-body">
-            <pre>
+          <div class="panel-body" style="padding:12px;">
+            <div class="ide-terminal-window">
+              <div class="ide-window-bar">
+                <div class="ide-window-left">
+                  <div class="mac-dots">
+                    <span class="mac-dot dot-red"></span>
+                    <span class="mac-dot dot-yellow"></span>
+                    <span class="mac-dot dot-green"></span>
+                  </div>
+                  <div class="ide-window-title">
+                    <span class="ide-tab-active">&#128196; p2p-validation-report.log</span>
+                    <span>&bull; UTF-8</span>
+                    <span>&bull; Strictly Read-Only</span>
+                  </div>
+                </div>
+                <div class="ide-actions">
+                  <button class="ide-copy-btn" onclick="copyTerminalText()">&#128203; Copy Log</button>
+                </div>
+              </div>
+              <div class="ide-terminal-body">
+                <pre class="ide-code" id="terminalOutput">====================================================================================
+P2P MIGRATION VALIDATION REPORT v8.0                     [MODE: STRICTLY READ-ONLY]
 ====================================================================================
-P2P MIGRATION VALIDATION REPORT v8.0           [MODE: STRICTLY READ-ONLY]
+Customer : ikea                     INC     : N/A
+Reference: tsbi631702001            Public  : tsbi631702003
+Date     : 2026-11-17 11:33:54      Changes : 0 Files / 0 Services Modified
+
+1. MRT DISCOVERY &amp; RUNTIME MAPPING
+------------------------------------------------------------------------------------
+Reference Running MRTs: 6     | Public Running MRTs: 6     | Matched: 6  <span class="t-pass">PASS</span>
+------------------------------------------------------------------------------------
+<span class="t-pass">PASS</span>  MRT Key: GGMST
+  Reference : mule_ee_ggmst            -&gt; F:\JDAConnect-GGMST
+  Public    : mule_ee_ggmst            -&gt; F:\JDAConnect-GGMST
+<span class="t-pass">PASS</span>  MRT Key: GGPRIS
+  Reference : mule_ee_ggpri-s          -&gt; F:\JDAConnect-GGPRI-S
+  Public    : mule_ee_ggpri-s          -&gt; F:\JDAConnect-GGPRI-S
+<span class="t-pass">PASS</span>  MRT Key: GGPRISCPO
+  Reference : mule_ee_ggpri-scpo       -&gt; F:\JDAConnect-GGPRI-SCPO
+  Public    : mule_ee_ggpri-scpo       -&gt; F:\JDAConnect-GGPRI-SCPO
+<span class="t-pass">PASS</span>  MRT Key: GGPRIE
+  Reference : mule_ee_ggprie46         -&gt; F:\JDAConnect-GGPRI-E46
+  Public    : mule_ee_ggpri-e          -&gt; F:\JDAConnect-GGPRI-E
+<span class="t-pass">PASS</span>  MRT Key: GGPRIP
+  Reference : mule_ee_ggpri_p          -&gt; F:\JDAConnect-GGPRI-P
+  Public    : mule_ee_ggpri-p          -&gt; F:\JDAConnect-GGPRI-P
+<span class="t-pass">PASS</span>  MRT Key: GGSVC
+  Reference : mule_ee_ggsvc            -&gt; F:\JDAConnect-GGSVC
+  Public    : mule_ee_ggsvc            -&gt; F:\JDAConnect-GGSVC
+
+2. PUBLIC SERVER SERVICE &amp; ACCOUNT VALIDATION
+------------------------------------------------------------------------------------
+Service              State      Start Mode      Logon Account                Status
+------------------------------------------------------------------------------------
+mule_ee_ggmst        Running    Delayed Auto    JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+mule_ee_ggpri-e      Running    Delayed Auto    JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+mule_ee_ggpri-p      Running    Delayed Auto    JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+mule_ee_ggpri-s      Running    Delayed Auto    JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+mule_ee_ggpri-scpo   Running    Delayed Auto    JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+mule_ee_ggsvc        Running    Auto            JDADELIVERS\bi63ts17$        <span class="t-pass">PASS</span>
+
+3. DIRECTORY, JCONN &amp; TEMP STRUCTURE (REFERENCE-BASED)
+------------------------------------------------------------------------------------
+Component                        Validation Detail                          Status
+------------------------------------------------------------------------------------
+Folder: Java8                    Present on Reference and Public            <span class="t-pass">PASS</span>
+Folder: JConn_CPS                Present on Reference and Public            <span class="t-pass">PASS</span>
+Folder: Jconn_Automation         Not Present On Reference Server - Not Req  <span class="t-pass">PASS</span>
+Folder: JDA                      Present on Reference and Public            <span class="t-pass">PASS</span>
+Folder: _SW                      Present on Reference and Public            <span class="t-pass">PASS</span>
+Subfolders: JConn_CPS            Populated on Reference and Public          <span class="t-pass">PASS</span>
+Temp Root: Base Directory        Present on Reference and Public            <span class="t-pass">PASS</span>
+Temp: GGMST                      Not Present On Reference - Not Required    <span class="t-pass">PASS</span>
+Temp: GGPRIS                     Present on Reference and Public            <span class="t-pass">PASS</span>
+Temp: GGPRISCPO                  Present on Reference and Public            <span class="t-pass">PASS</span>
+Temp: GGPRIE                     Present on Reference and Public            <span class="t-pass">PASS</span>
+Temp: GGPRIP                     Present on Reference and Public            <span class="t-pass">PASS</span>
+Temp: GGSVC                      Present on Reference and Public            <span class="t-pass">PASS</span>
+
+4. ENVIRONMENT VALIDATION
+------------------------------------------------------------------------------------
+Java Version : openjdk version &quot;1.8.0_412&quot;
+JAVA_HOME    : F:\Java8\JDK\  (Exe: F:\Java8\JDK\bin\java.exe)
+Resources    : CPU: 12% | Mem: 63% (11.9 GB Free) | Disk (F): 502.54 GB Free  <span class="t-pass">PASS</span>
+ActiveMQ     : Present on Reference and Public (F:\AMQ, F:\AMQ)  <span class="t-pass">PASS</span>
+
+AMQ Listener Ports : 31080
+AMQ Status         : LISTENING <span class="t-pass">PASS</span>
+
+AMQ Console URLs :
+  <span class="t-url">http://tsbi631702003:11080/index.html</span>
+  <span class="t-url">http://tsbi631702003:31080/index.html</span>
+  <span class="t-url">http://tsbi631702003:51080/index.html</span>
+
+5.1 WRAPPER CONFIGURATION : GGMST (mule_ee_ggmst)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            512m                 512m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         1024m                1024m                <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31997                31997                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31997                31997                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Not Set              Not Set              <span class="t-pass">PASS</span>
+
+5.2 WRAPPER CONFIGURATION : GGPRIS (mule_ee_ggpri-s)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            256m                 256m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         512m                 512m                 <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31994                31994                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31994                31994                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Configured           Configured           <span class="t-pass">PASS</span>
+
+5.3 WRAPPER CONFIGURATION : GGPRISCPO (mule_ee_ggpri-scpo)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            256m                 256m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         512m                 512m                 <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31995                31995                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31995                31995                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Configured           Configured           <span class="t-pass">PASS</span>
+
+5.4 WRAPPER CONFIGURATION : GGPRIE (mule_ee_ggpri-e)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            256m                 256m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         512m                 512m                 <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31993                31993                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31993                31993                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Configured           Configured           <span class="t-pass">PASS</span>
+
+5.5 WRAPPER CONFIGURATION : GGPRIP (mule_ee_ggpri-p)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            256m                 256m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         512m                 512m                 <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31992                31992                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31992                31992                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Configured           Configured           <span class="t-pass">PASS</span>
+
+5.6 WRAPPER CONFIGURATION : GGSVC (mule_ee_ggsvc)
+------------------------------------------------------------------------------------
+Property                 Reference            Public               Status
+------------------------------------------------------------------------------------
+InitMemory               1024                 1024                 <span class="t-pass">PASS</span>
+MaxMemory                6144                 6144                 <span class="t-pass">PASS</span>
+MetaspaceSize            512m                 512m                 <span class="t-pass">PASS</span>
+MaxMetaspaceSize         1024m                1024m                <span class="t-pass">PASS</span>
+JmxRemote                Enabled              Enabled              <span class="t-pass">PASS</span>
+JmxPort                  31991                31991                <span class="t-pass">PASS</span>
+JmxAuth                  false                false                <span class="t-pass">PASS</span>
+JmxSsl                   false                false                <span class="t-pass">PASS</span>
+RmiPort                  31991                31991                <span class="t-pass">PASS</span>
+OracleJdbcCompliance     true                 true                 <span class="t-pass">PASS</span>
+AnypointGatekeeper       Not Configured       Not Configured       <span class="t-pass">PASS</span>
+AnypointBaseUri          Configured (eu1)     Configured (eu1)     <span class="t-pass">PASS</span>
+JavaTmpDir (Presence)    Configured           Configured           <span class="t-pass">PASS</span>
+
+6. ACTIONABLE LOG FINDINGS
+------------------------------------------------------------------------------------
+Application          Log File                       Errors   Fatals   Exceptions   Status
+------------------------------------------------------------------------------------
+JDAConnect-GGMST     mule_ee_ggmst.log              36       0        42           <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-E   mule_ee_ggpri-e.log            35       0        69           <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-E   jda-ion-eapi.log               5        0        0            <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-P   mule_ee_ggpri-p.log            8        0        0            <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-S   jda-fso-sapi-hr.log            15       0        14           <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-S   jda-fso-sapi-hr-10.log         13       0        27           <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-SCPO mule_ee_ggpri-scpo.log         7        0        2            <span class="t-warn">WARN</span>
+JDAConnect-GGPRI-SCPO jda-ikea-scpo-adapter.log      7        0        20           <span class="t-warn">WARN</span>
+JDAConnect-GGSVC     mule_ee_ggsvc.log              37       0        72           <span class="t-warn">WARN</span>
+
+7. CRITICAL ERROR ANALYSIS
+------------------------------------------------------------------------------------
+OutOfMemoryError           Count: 0     <span class="t-pass">PASS</span>
+BindException              Count: 0     <span class="t-pass">PASS</span>
+AccessDeniedException      Count: 0     <span class="t-pass">PASS</span>
+UnknownHostException       Count: 0     <span class="t-pass">PASS</span>
+ConnectException           Count: 0     <span class="t-pass">PASS</span>
+SSLException               Count: 0     <span class="t-pass">PASS</span>
+ORA-                       Count: 0     <span class="t-pass">PASS</span>
+Permission denied          Count: 0     <span class="t-pass">PASS</span>
+FileNotFoundException      Count: 0     <span class="t-pass">PASS</span>
+
+8. REFERENCE DIFFERENCES
+------------------------------------------------------------------------------------
+Only On Reference:
+  None
+
+Only On Public:
+  None
+
+Reference-Required Missing On Public:
+  None
+
+9. CUTOVER RISK SUMMARY
+------------------------------------------------------------------------------------
+HIGH RISK FINDINGS
+------------------
+None detected.
+
+OVERALL RISK LEVEL
+------------------
+LOW
+
+10. MIGRATION SUMMARY
+------------------------------------------------------------------------------------
+Reference Running MRTs         : 6
+Public Running MRTs            : 6
+Matched MRTs                   : 6
+Applications With Log Warnings : 6
+Wrapper Matches                : 6/6
+Wrapper Custom Properties Checked : 4 (Oracle JDBC, Gatekeeper, Base URI, JavaTmpDir)
+Service Matches                : 6/6
+Critical Errors Found          : 0
+Reference Differences          : 0
+
+11. CUTOVER DECISION MATRIX
+------------------------------------------------------------------------------------
+MRT Discovery              : PASS
+Public Services            : PASS
+Folders &amp; Temp             : PASS
+Environment &amp; Java         : PASS
+Wrapper Configuration      : PASS
+Critical Log Signatures    : PASS
+
+Decision
+--------
+READY FOR CUTOVER
+
 ====================================================================================
-Customer : ikea                      INC     : N/A
-Reference: tsbi631702001             Public  : tsbi631702003
-Date     : 2026-11-17 11:33:58       Changes : 0 Files / 0 Services Modified
-...
-[Full terminal output — hidden from PDF]
-            </pre>
+MIGRATION READINESS SIGN-OFF                             [DURATION: 15.74 SECONDS]
+====================================================================================
+  <span class="t-pass">OK</span> Dynamic MRT Discovery &amp; Mapping
+  <span class="t-pass">OK</span> Public Services &amp; Logon Accounts
+  <span class="t-pass">OK</span> Directory, JConn &amp; Temp Structure (Reference-Based)
+  <span class="t-pass">OK</span> Environment &amp; Java Validation
+  <span class="t-pass">OK</span> Wrapper Memory &amp; JMX Configuration
+  <span class="t-pass">OK</span> Critical Log Signatures (0 Detected)
+
+FINAL RESULT : READY FOR CUTOVER (0 Failures Detected)
+====================================================================================</pre>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -802,5 +1274,34 @@ Date     : 2026-11-17 11:33:58       Changes : 0 Files / 0 Services Modified
 
   </div><!-- .layout -->
 
+<script>
+function toggleTheme() {
+  const root = document.documentElement;
+  const currentTheme = root.getAttribute('data-theme');
+  const btn = document.getElementById('themeBtn');
+  if (currentTheme === 'dark') {
+    root.setAttribute('data-theme', 'light');
+    btn.innerHTML = '🌙 Dark Mode';
+  } else {
+    root.setAttribute('data-theme', 'dark');
+    btn.innerHTML = '☀️ Light Mode';
+  }
+}
+
+function copyTerminalText() {
+  const el = document.getElementById('terminalOutput');
+  const text = el.innerText || el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Full terminal report copied to clipboard!');
+  }).catch(() => {
+    const range = document.createRange();
+    range.selectNode(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.execCommand('copy');
+    alert('Full terminal report copied to clipboard!');
+  });
+}
+</script>
 </body>
 </html>
