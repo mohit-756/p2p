@@ -573,7 +573,7 @@
       </div>
       <div class="hero-content">
         <div>
-          <div class="hero-verdict-text">READY FOR CUTOVER</div>
+          <div class="hero-verdict-text">VALIDATION PASSED</div>
           <div class="hero-sub">&#10003; READ ONLY VALIDATION &bull; NO FILES MODIFIED &bull; NO SERVICES RESTARTED &bull; NO CONFIGURATION CHANGED</div>
         </div>
         <div class="hero-stats">
@@ -587,7 +587,7 @@
           </div>
           <div class="hero-stat">
             <div class="hero-stat-value">6 Apps</div>
-            <div class="hero-stat-label">LOG WARNINGS</div>
+            <div class="hero-stat-label">LOG ACTIVITY</div>
           </div>
           <div class="hero-stat">
             <div class="hero-stat-value">0</div>
@@ -756,6 +756,19 @@
 
       <!-- Tab: Logs -->
       <div id="tab-logs" class="tab-pane">
+        <div style='margin-bottom:14px;padding:12px 16px;background:var(--bg-subtle);border:1px solid var(--border-color);border-radius:8px;'>
+          <div style='font-size:11px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>
+            Applications Showing Log Activity (6)
+          </div>
+          <div style='display:flex;flex-wrap:wrap;gap:8px;'>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGMST</span>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGPRI-E</span>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGPRI-P</span>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGPRI-S</span>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGPRI-SCPO</span>
+            <span class='scope-tag'><span class='dot'>&#9679;</span> JDAConnect-GGSVC</span>
+          </div>
+        </div>
         <table>
           <thead><tr><th>Application</th><th>Active Log File</th><th>Errors</th><th>Fatals</th><th>Exceptions</th><th>Visual Breakdown</th><th>Status</th></tr></thead>
           <tbody>
@@ -1118,7 +1131,7 @@ LOW (WITH WARNINGS)
 Reference Running MRTs         : 6
 Public Running MRTs            : 6
 Matched MRTs                   : 6
-Applications With Log Warnings : 6
+Applications With Log Activity : 6
 Wrapper Matches                : 6/6
 Wrapper Custom Properties Checked : 4
 Service Matches                : 6/6
@@ -1136,7 +1149,12 @@ Escalation Signatures      : PASS
 
 Decision
 --------
-READY FOR CUTOVER
+VALIDATION PASSED
+
+MRTs Matched                   : 6/6
+Wrappers Matched               : 6/6
+Reference Differences          : 0
+Escalation Signatures          : 0
 
 12. FINAL SIGN-OFF
 ====================================================================================
@@ -1149,7 +1167,7 @@ MIGRATION READINESS SIGN-OFF                             [DURATION: 15.82 SECOND
   [OK] Wrapper Memory &amp; JMX Configuration
   [OK] Escalation Signatures (0 Detected)
 
-FINAL RESULT : READY FOR CUTOVER (0 Failures Detected)
+FINAL RESULT : VALIDATION PASSED
 ====================================================================================</pre>
           </div>
         </div>
